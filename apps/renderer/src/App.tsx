@@ -84,7 +84,7 @@ type View =
 const NAV_ITEMS: Array<{ id: View; label: string; icon: typeof AudioLines }> = [
   { id: "home", label: "Overview", icon: Gauge },
   { id: "sounds", label: "Sounds", icon: ListMusic },
-  { id: "visuals", label: "Visuals", icon: ImageIcon },
+  { id: "visuals", label: "Visuals (WIP)", icon: ImageIcon },
   { id: "projects", label: "Projects", icon: Layers3 },
   { id: "packages", label: "PAK Combiner", icon: Merge },
   { id: "diagnostics", label: "Diagnostics", icon: Activity },

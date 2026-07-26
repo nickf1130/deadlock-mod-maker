@@ -6,6 +6,8 @@ Pick a sound from the game, choose a file to replace it with, and Deadlock Mod M
 compiles and packages it into a `.vpk` mod file. You do not need to know how to program, use a
 command line, or manually run any modding tools.
 
+Deadlock Mods are currently a gray area; use this and related tools at your own risk!
+
 > NOTE: Deadlock Mod Maker is a project made by me alone and is in no way affiliated with Valve.
 
 ---
