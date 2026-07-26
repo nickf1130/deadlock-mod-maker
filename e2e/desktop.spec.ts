@@ -252,8 +252,8 @@ test("desktop shell exposes the consolidated roadmap workflow", async ({}, testI
     });
     await expect(page.locator(".list-summary")).toContainText("catalog version");
 
-    await page.getByRole("button", { name: "Visuals", exact: true }).click();
-    await expect(page.getByRole("heading", { name: "Visuals", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Visuals (WIP)", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Visuals (WIP)", exact: true })).toBeVisible();
     await expect(page.locator(".project-required")).toBeVisible();
     await expect(page.getByLabel("Visual resource kind")).toContainText(
       "Textures & materials"
