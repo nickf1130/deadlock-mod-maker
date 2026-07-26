@@ -50,7 +50,15 @@ jobs:
         run: npm run audit:python
 
       - name: Run desktop integration tests
+        # The unpackaged Electron app starts the backend with `python -m
+        # deadlock_sound_studio`. On a runner the interpreter on PATH has none
+        # of the dependencies -- those live in the isolated environment that
+        # `npm run test:python` builds -- so point the worker at that one.
+        # Without this the worker dies on import, the renderer never finishes
+        # bootstrapping, and every test fails waiting for an empty DOM.
         run: npm run test:e2e
+        env:
+          DSS_PYTHON: ${{ github.workspace }}\python\.venv-release\Scripts\python.exe
 
       - name: Build and verify portable release
         run: npm run dist
