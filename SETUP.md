@@ -107,7 +107,9 @@ The worker then accepts one JSON-RPC request per standard-input line and writes 
 PyInstaller uses one-folder mode for predictable startup and easier DLL diagnosis. Electron Builder copies that folder to `resources/backend/deadlock-sound-worker`.
 
 To enable the in-app updater, publish the portable artifact as a GitHub Release asset named
-`DeadlockModMaker-<version>-portable.exe`. Portable builds download the newer asset beside the
+`DeadlockModMaker-<version>-portable.exe`. The updater requires the exact versioned filename,
+the asset size, and the SHA-256 digest supplied by GitHub's release API before it offers automatic
+installation. Portable builds verify the complete download, place the newer asset beside the
 running executable, relaunch it through a detached helper, and remove the previous executable
 after the old process exits. Development builds direct the user to the Releases page instead.
 
@@ -119,7 +121,11 @@ Normal tests use fixtures and never require CSDK or Deadlock. To run opt-in loca
 $env:DSS_RUN_INTEGRATION = "1"
 $env:DSS_CSDK_ROOT = "C:\path\to\Reduced_CSDK_12"
 $env:DSS_DEADLOCK_ROOT = "C:\path\to\Deadlock"
-python -m pytest python/tests/test_integration_tools.py -m integration
+$env:DSS_FFMPEG = "C:\path\to\ffmpeg.exe"
+$env:DSS_FFPROBE = "C:\path\to\ffprobe.exe"
+Push-Location .\python
+& .\.venv-release\Scripts\python.exe -m pytest tests/test_integration_tools.py -m integration
+Pop-Location
 ```
 
 Integration probes are read-only unless a test explicitly states that it creates an application-owned temporary addon.

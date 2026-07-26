@@ -28,6 +28,7 @@ export type UpdateInfo = {
   assetName: string | null;
   assetUrl: string | null;
   assetSize: number | null;
+  assetDigest: string | null;
   canInstall: boolean;
   status: "available" | "current" | "noReleases";
 };

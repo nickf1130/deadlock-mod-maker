@@ -37,6 +37,7 @@ import {
   X
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { flushSync } from "react-dom";
 import { StatusBadge } from "./components/StatusBadge";
 import { SoundTutorial } from "./components/SoundTutorial";
 import { WaveformPlayer } from "./components/WaveformPlayer";
@@ -201,7 +202,18 @@ function App() {
     return () => window.clearTimeout(timer);
   }, [notice]);
 
-  const setView = useCallback((nextView: View) => setActiveView(nextView), []);
+  const setView = useCallback((nextView: View) => {
+    const documentWithTransitions = document as Document & {
+      startViewTransition?: (update: () => void) => unknown;
+    };
+    if (!documentWithTransitions.startViewTransition) {
+      setActiveView(nextView);
+      return;
+    }
+    documentWithTransitions.startViewTransition(() => {
+      flushSync(() => setActiveView(nextView));
+    });
+  }, []);
 
   const loadBootstrap = useCallback(async () => {
     setBusy(true);
@@ -3184,6 +3196,13 @@ function AboutPage({
           <button onClick={() => void open("repository")}><ExternalLink size={16} /> Repository</button>
           <button onClick={() => void open("releases")}><PackageOpen size={16} /> Releases</button>
           <button onClick={() => void open("issues")}><CircleAlert size={16} /> Report an issue</button>
+          <button
+            onClick={() =>
+              void window.studio.openLicenses().catch((error) => onNotice(errorMessage(error)))
+            }
+          >
+            <FileArchive size={16} /> Third-party notices
+          </button>
         </div>
       </section>
 

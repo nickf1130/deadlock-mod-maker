@@ -6,12 +6,24 @@ directories:
 files:
   - dist/**
   - dist-electron/**
+  - "!dist-electron/**/*.test.js"
+  - "!dist-electron/**/*.test.js.map"
+  - "!dist-electron/**/*.map"
+  - "!node_modules/**/*.map"
+  - "!node_modules/**/__tests__/**"
+  - "!node_modules/**/*.test.js"
   - package.json
 extraResources:
   - from: python/dist/deadlock-sound-worker
     to: backend/deadlock-sound-worker
     filter:
       - "**/*"
+  - from: LICENSE.md
+    to: LICENSE.md
+  - from: THIRD_PARTY_NOTICES.md
+    to: THIRD_PARTY_NOTICES.md
+  - from: licenses
+    to: licenses
 win:
   # electron-builder generates the multi-resolution .ico from this source.
   icon: build/icon.png

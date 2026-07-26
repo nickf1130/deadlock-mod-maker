@@ -10,6 +10,14 @@ import {
 } from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
+import {
+  assertDownloadWithinBounds,
+  expectedPortableAssetName,
+  isSafeUpdateSize,
+  isTrustedReleaseAssetUrl,
+  normalizeSha256Digest,
+  verifyDownloadedUpdate
+} from "./update-security.js";
 import { compareVersions } from "./version.js";
 
 export const REPOSITORY_URL = "https://github.com/nickf1130/deadlock-mod-maker";
@@ -18,12 +26,12 @@ export const ISSUES_URL = `${REPOSITORY_URL}/issues`;
 export const PROFILE_URL = "https://github.com/nickf1130";
 const RELEASE_API =
   "https://api.github.com/repos/nickf1130/deadlock-mod-maker/releases/latest";
-const PORTABLE_ASSET = /^DeadlockModMaker-[0-9A-Za-z.+-]+-portable\.exe$/i;
 
 type GitHubAsset = {
   name?: unknown;
   size?: unknown;
   browser_download_url?: unknown;
+  digest?: unknown;
 };
 
 type GitHubRelease = {
@@ -46,6 +54,7 @@ export type UpdateInfo = {
   assetName: string | null;
   assetUrl: string | null;
   assetSize: number | null;
+  assetDigest: string | null;
   canInstall: boolean;
   status: "available" | "current" | "noReleases";
 };
@@ -72,6 +81,7 @@ export async function checkForUpdates(): Promise<UpdateInfo> {
       assetName: null,
       assetUrl: null,
       assetSize: null,
+      assetDigest: null,
       canInstall: false,
       status: "noReleases"
     };
@@ -85,18 +95,29 @@ export async function checkForUpdates(): Promise<UpdateInfo> {
       ? release.tag_name.replace(/^v/i, "")
       : null;
   if (!latestVersion) throw new Error("The latest GitHub release has no valid version tag.");
+  const expectedAssetName = expectedPortableAssetName(latestVersion);
   const assets = Array.isArray(release.assets)
     ? (release.assets as GitHubAsset[])
     : [];
   const asset = assets.find(
     (candidate) =>
-      typeof candidate.name === "string" && PORTABLE_ASSET.test(candidate.name)
+      typeof candidate.name === "string" &&
+      candidate.name.toLowerCase() === expectedAssetName.toLowerCase()
   );
   const assetName = typeof asset?.name === "string" ? asset.name : null;
   const assetUrl =
     typeof asset?.browser_download_url === "string"
       ? asset.browser_download_url
       : null;
+  const assetSize = isSafeUpdateSize(asset?.size) ? asset.size : null;
+  const assetDigest = normalizeSha256Digest(asset?.digest);
+  const trustedAsset = Boolean(
+    assetName &&
+      assetUrl &&
+      assetSize &&
+      assetDigest &&
+      isTrustedReleaseAssetUrl(assetUrl, latestVersion, assetName)
+  );
   const portableExecutable = process.env.PORTABLE_EXECUTABLE_FILE;
   const available = compareVersions(latestVersion, currentVersion) > 0;
   return {
@@ -112,11 +133,11 @@ export async function checkForUpdates(): Promise<UpdateInfo> {
       typeof release.html_url === "string" ? release.html_url : RELEASES_URL,
     assetName,
     assetUrl,
-    assetSize: typeof asset?.size === "number" ? asset.size : null,
+    assetSize,
+    assetDigest,
     canInstall: Boolean(
       available &&
-        assetName &&
-        assetUrl &&
+        trustedAsset &&
         portableExecutable &&
         path.isAbsolute(portableExecutable) &&
         existsSync(portableExecutable)
@@ -134,13 +155,34 @@ export async function downloadAndApplyUpdate(
   appRoot: string,
   progress: (payload: Record<string, unknown>) => void
 ): Promise<{ downloadedPath: string; sha256: string }> {
-  if (!update.available || !update.canInstall || !update.assetName || !update.assetUrl) {
+  if (
+    !update.available ||
+    !update.canInstall ||
+    !update.latestVersion ||
+    !update.assetName ||
+    !update.assetUrl ||
+    !update.assetDigest ||
+    !update.assetSize
+  ) {
     throw new Error(
-      "Automatic installation is available only from a newer portable GitHub release."
+      "Automatic installation requires a newer portable GitHub release with a published SHA-256 digest."
     );
   }
-  if (!PORTABLE_ASSET.test(update.assetName)) {
-    throw new Error("The GitHub release asset has an unsafe filename.");
+  const expectedAssetName = expectedPortableAssetName(update.latestVersion);
+  if (update.assetName.toLowerCase() !== expectedAssetName.toLowerCase()) {
+    throw new Error("The GitHub release asset does not match the release version.");
+  }
+  if (!isSafeUpdateSize(update.assetSize)) {
+    throw new Error("The GitHub release asset has an invalid size.");
+  }
+  if (
+    !isTrustedReleaseAssetUrl(
+      update.assetUrl,
+      update.latestVersion,
+      update.assetName
+    )
+  ) {
+    throw new Error("The GitHub release asset URL is not trusted.");
   }
   const oldExecutable = process.env.PORTABLE_EXECUTABLE_FILE;
   if (!oldExecutable || !path.isAbsolute(oldExecutable) || !existsSync(oldExecutable)) {
@@ -162,6 +204,7 @@ export async function downloadAndApplyUpdate(
     totalBytes: update.assetSize ?? 0
   });
   const response = await net.fetch(update.assetUrl, {
+    signal: AbortSignal.timeout(10 * 60_000),
     headers: {
       Accept: "application/octet-stream",
       "User-Agent": `Deadlock-Mod-Maker/${app.getVersion()}`
@@ -173,8 +216,10 @@ export async function downloadAndApplyUpdate(
   }
   const totalBytes =
     Number.parseInt(response.headers.get("content-length") ?? "", 10) ||
-    update.assetSize ||
-    0;
+    update.assetSize;
+  if (!isSafeUpdateSize(totalBytes) || totalBytes !== update.assetSize) {
+    throw new Error("The update response size does not match the GitHub release.");
+  }
   const crypto = await import("node:crypto");
   const hasher = crypto.createHash("sha256");
   const writer = createWriteStream(partial, { flags: "wx" });
@@ -187,6 +232,7 @@ export async function downloadAndApplyUpdate(
       const chunk = Buffer.from(value);
       hasher.update(chunk);
       downloadedBytes += chunk.length;
+      assertDownloadWithinBounds(downloadedBytes, update.assetSize);
       if (!writer.write(chunk)) await once(writer, "drain");
       progress({
         event: "update.progress",
@@ -204,14 +250,21 @@ export async function downloadAndApplyUpdate(
     if (existsSync(partial)) rmSync(partial, { force: true });
     throw error;
   }
-  if (!existsSync(partial) || statSync(partial).size <= 0) {
-    throw new Error("The downloaded update is empty.");
-  }
-  if (update.assetSize && statSync(partial).size !== update.assetSize) {
-    rmSync(partial, { force: true });
-    throw new Error("The downloaded update size does not match the GitHub release.");
+  if (!existsSync(partial)) {
+    throw new Error("The downloaded update is missing.");
   }
   const sha256 = hasher.digest("hex");
+  try {
+    verifyDownloadedUpdate({
+      actualBytes: statSync(partial).size,
+      actualSha256: sha256,
+      expectedBytes: update.assetSize,
+      expectedSha256: update.assetDigest
+    });
+  } catch (error) {
+    rmSync(partial, { force: true });
+    throw error;
+  }
   progress({
     event: "update.progress",
     stage: "ready",

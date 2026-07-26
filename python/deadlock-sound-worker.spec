@@ -1,6 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
 from pathlib import Path
-from PyInstaller.utils.hooks import collect_submodules
 
 project_root = Path(SPECPATH)
 
@@ -14,7 +13,10 @@ a = Analysis(
             "deadlock_sound_studio/database/migrations",
         )
     ],
-    hiddenimports=["mutagen", "openpyxl", "pydantic", *collect_submodules("PIL")],
+    # PyInstaller's PIL.Image hook discovers image plugins. Collecting every
+    # PIL module here also pulled optional development packages from whichever
+    # machine happened to build the release.
+    hiddenimports=["mutagen", "openpyxl", "pydantic"],
 )
 pyz = PYZ(a.pure)
 exe = EXE(

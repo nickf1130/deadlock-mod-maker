@@ -12,5 +12,6 @@
     "noEmit": false,
     "sourceMap": true
   },
-  "include": ["**/*.ts", "**/*.cts"]
+  "include": ["**/*.ts", "**/*.cts"],
+  "exclude": ["**/*.test.ts"]
 }

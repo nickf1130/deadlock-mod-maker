@@ -1,6 +1,8 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { once } from "node:events";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { spawn } from "node:child_process";
 import { expect, test } from "@playwright/test";
 import { _electron as electron } from "playwright";
 
@@ -170,7 +172,7 @@ test("desktop shell exposes the consolidated roadmap workflow", async ({}, testI
     const workspaceBackground = await page.locator(".workspace").evaluate(
       (element) => getComputedStyle(element).backgroundImage
     );
-    const overviewBackground = await page.locator(".hero-panel").evaluate(
+    const overviewBackground = await page.locator(".overview-projects").evaluate(
       (element) => getComputedStyle(element).backgroundImage
     );
     expect(workspaceBackground).toBe("none");
@@ -178,7 +180,9 @@ test("desktop shell exposes the consolidated roadmap workflow", async ({}, testI
 
     await page.getByRole("button", { name: "PAK Combiner", exact: true }).click();
     await expect(page.getByRole("heading", { name: "PAK Combiner", exact: true })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Inspect and combine PAK files." })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Inspect and combine PAK files", exact: true })
+    ).toBeVisible();
     await expect(page.getByRole("button", { name: "Choose package files" })).toBeVisible();
     expect(await page.evaluate(() => typeof window.studio.selectPackages)).toBe("function");
     expect(await page.evaluate(() => typeof window.studio.selectPackageOutput)).toBe("function");
@@ -200,10 +204,9 @@ test("desktop shell exposes the consolidated roadmap workflow", async ({}, testI
     await expect(page.getByText("sounds/shared.vsnd_c", { exact: true })).toHaveCount(2);
     await expect(page.locator(".package-summary")).toContainText("1");
     await page.getByRole("button", { name: "Combine into one package" }).click();
-    await expect(page.getByText("Combined package ready", { exact: true })).toBeVisible({
-      timeout: 15_000
-    });
-    await expect(page.locator(".package-result")).toContainText("3 items written");
+    await expect(
+      page.locator(".package-result").getByRole("heading", { name: "3 items written" })
+    ).toBeVisible({ timeout: 15_000 });
     const combinedBytes = await readFile(combinedPackage);
     expect(combinedBytes.readUInt32LE(0)).toBe(VPK_SIGNATURE);
     await page.screenshot({
@@ -233,7 +236,7 @@ test("desktop shell exposes the consolidated roadmap workflow", async ({}, testI
     );
 
     await page.getByRole("button", { name: "Search", exact: true }).click();
-    await expect(page.locator(".sound-list > .activity-bar")).toBeHidden({
+    await expect(page.locator(".sound-list > .activity-bar")).not.toHaveClass(/is-active/, {
       timeout: 10_000
     });
     await expect(page.locator(".list-summary")).toContainText("catalog version");
@@ -309,14 +312,19 @@ test("desktop shell exposes the consolidated roadmap workflow", async ({}, testI
     });
     await page.getByRole("button", { name: "Close build and export" }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
-    page.once("dialog", (dialog) => void dialog.accept());
     await page.getByRole("button", { name: "Delete Recoverable Test Mod" }).click();
+    const deleteDialog = page.getByRole("alertdialog", {
+      name: "Delete Recoverable Test Mod?"
+    });
+    await expect(deleteDialog).toBeVisible();
+    await deleteDialog.getByRole("button", { name: "Delete project" }).click();
     await expect(page.getByRole("button", { name: "Delete Recoverable Test Mod" })).toHaveCount(0);
 
     await page.getByRole("button", { name: "About", exact: true }).click();
     await expect(page.getByRole("heading", { name: /Deadlock Mod Maker/ })).toBeVisible();
     await expect(page.getByRole("button", { name: "Check for updates" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Nick on GitHub" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Third-party notices" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Replay tutorial" })).toBeVisible();
     await page.getByRole("button", { name: "Replay tutorial" }).click();
     const tutorial = page.getByRole("dialog", { name: "Create your mod" });
@@ -393,6 +401,87 @@ test("first launch is gated by the complete setup checklist", async ({}, testInf
       fullPage: true
     });
   } finally {
+    await application.close();
+  }
+});
+
+test("a second launch restores the existing window instead of starting another worker", async ({}, testInfo) => {
+  const appData = testInfo.outputPath("single-instance-app-data");
+  await mkdir(path.join(appData, "data"), { recursive: true });
+  await writeFile(
+    path.join(appData, "data", "settings.json"),
+    JSON.stringify({
+      setupCompleted: true,
+      tutorialCompleted: true
+    })
+  );
+  const environment = Object.fromEntries(
+    Object.entries(process.env).filter(
+      (entry): entry is [string, string] =>
+        entry[0] !== "ELECTRON_RUN_AS_NODE" && typeof entry[1] === "string"
+    )
+  );
+  const packagedExecutable = process.env.DSS_DESKTOP_EXECUTABLE;
+  const launchEnvironment = {
+    ...environment,
+    DSS_SKIP_UPDATE_CHECK: "1",
+    ...(packagedExecutable
+      ? { PORTABLE_EXECUTABLE_DIR: appData }
+      : { DSS_TEST_APP_ROOT: appData })
+  };
+  const application = await electron.launch({
+    ...(packagedExecutable
+      ? { executablePath: path.resolve(packagedExecutable), args: [] }
+      : { args: [workspace] }),
+    cwd: workspace,
+    env: launchEnvironment
+  });
+
+  let secondProcess: ReturnType<typeof spawn> | null = null;
+  try {
+    const page = await application.firstWindow();
+    await expect(page.locator(".app-shell")).toBeVisible({ timeout: 30_000 });
+    await application.evaluate(({ BrowserWindow }) => {
+      BrowserWindow.getAllWindows()[0]?.minimize();
+    });
+    await expect
+      .poll(() =>
+        application.evaluate(({ BrowserWindow }) =>
+          BrowserWindow.getAllWindows()[0]?.isMinimized()
+        )
+      )
+      .toBe(true);
+
+    const secondExecutable = packagedExecutable
+      ? path.resolve(packagedExecutable)
+      : path.join(workspace, "node_modules", "electron", "dist", "electron.exe");
+    secondProcess = spawn(
+      secondExecutable,
+      packagedExecutable ? [] : [workspace],
+      {
+        cwd: workspace,
+        env: launchEnvironment,
+        windowsHide: true,
+        stdio: "ignore"
+      }
+    );
+    const exitCode = await Promise.race([
+      once(secondProcess, "exit").then(([code]) => code),
+      new Promise<never>((_resolve, reject) =>
+        setTimeout(() => reject(new Error("Second instance did not exit")), 10_000)
+      )
+    ]);
+    expect(exitCode).toBe(0);
+    await expect
+      .poll(() =>
+        application.evaluate(({ BrowserWindow }) => {
+          const window = BrowserWindow.getAllWindows()[0];
+          return window ? { minimized: window.isMinimized(), visible: window.isVisible() } : null;
+        })
+      )
+      .toEqual({ minimized: false, visible: true });
+  } finally {
+    if (secondProcess && secondProcess.exitCode === null) secondProcess.kill();
     await application.close();
   }
 });

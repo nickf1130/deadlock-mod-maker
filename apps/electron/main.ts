@@ -30,6 +30,7 @@ const approvedOutputs = new Set<string>();
 let mainWindow: BrowserWindow | null = null;
 let worker: PythonWorker | null = null;
 let latestUpdate: UpdateInfo | null = null;
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
 const uiSmoke = process.env.DSS_UI_SMOKE === "1";
 const downloadPages = {
   ffmpeg: "https://www.ffmpeg.org/download.html",
@@ -77,6 +78,9 @@ function createWindow(): void {
       webSecurity: true,
       backgroundThrottling: false
     }
+  });
+  mainWindow.on("closed", () => {
+    mainWindow = null;
   });
   mainWindow.once("ready-to-show", () => {
     if (!uiSmoke) mainWindow?.show();
@@ -171,7 +175,7 @@ async function captureUiSmoke(window: BrowserWindow): Promise<void> {
         while (Date.now() < soundsDeadline) {
           const settled = await window.webContents.executeJavaScript(
             `Boolean(document.querySelector(".search-row")) &&
-             !document.querySelector(".sound-list > .activity-bar")`,
+             !document.querySelector(".sound-list > .activity-bar.is-active")`,
             true
           );
           if (settled) break;
@@ -275,6 +279,7 @@ function registerIpc(): void {
         assetName: null,
         assetUrl: null,
         assetSize: null,
+        assetDigest: null,
         canInstall: false,
         status: "available"
       } satisfies UpdateInfo;
@@ -291,6 +296,7 @@ function registerIpc(): void {
         assetName: null,
         assetUrl: null,
         assetSize: null,
+        assetDigest: null,
         canInstall: false,
         status: "current"
       } satisfies UpdateInfo;
@@ -315,6 +321,15 @@ function registerIpc(): void {
       await shell.openExternal(url);
     }
   );
+
+  ipcMain.handle("licenses:open", async () => {
+    const noticePath = app.isPackaged
+      ? path.join(process.resourcesPath, "THIRD_PARTY_NOTICES.md")
+      : path.join(projectRoot, "THIRD_PARTY_NOTICES.md");
+    if (!existsSync(noticePath)) throw new Error("Third-party notices are missing");
+    const error = await shell.openPath(noticePath);
+    if (error) throw new Error(error);
+  });
 
   ipcMain.handle("drop:approve", (_event, targetPath: string) => {
     const canonical = canonicalExisting(targetPath);
@@ -552,27 +567,42 @@ function registerIpc(): void {
   });
 }
 
-app.whenReady().then(() => {
-  log.initialize();
-  Menu.setApplicationMenu(null);
-  protocol.handle("studio-media", (request) => {
-    const token = new URL(request.url).pathname.slice(1);
-    const targetPath = mediaTokens.get(token);
-    if (!targetPath) return new Response("Not found", { status: 404 });
-    return net.fetch(pathToFileURL(targetPath).toString());
+if (!hasSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
   });
-  worker = new PythonWorker(
-    appRoot,
-    (event) => mainWindow?.webContents.send("backend:event", event),
-    projectRoot
-  );
-  worker.start();
-  registerIpc();
-  createWindow();
-});
 
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") app.quit();
-});
+  void app.whenReady().then(() => {
+    log.initialize();
+    Menu.setApplicationMenu(null);
+    protocol.handle("studio-media", (request) => {
+      const token = new URL(request.url).pathname.slice(1);
+      const targetPath = mediaTokens.get(token);
+      if (!targetPath) return new Response("Not found", { status: 404 });
+      return net.fetch(pathToFileURL(targetPath).toString());
+    });
+    worker = new PythonWorker(
+      appRoot,
+      (event) => mainWindow?.webContents.send("backend:event", event),
+      projectRoot
+    );
+    worker.start();
+    registerIpc();
+    createWindow();
+  });
 
-app.on("before-quit", () => worker?.stop());
+  app.on("activate", () => {
+    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+  });
+
+  app.on("window-all-closed", () => {
+    if (process.platform !== "darwin") app.quit();
+  });
+
+  app.on("before-quit", () => worker?.stop());
+}

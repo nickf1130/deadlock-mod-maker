@@ -1,14 +1,14 @@
 # Deadlock Mod Maker
 
-A Windows app for making sound and texture mods for Valve's Deadlock.
+A Windows app for making sound mods for Valve's Deadlock.
 
 Pick a sound from the game, choose a file to replace it with, and Deadlock Mod Maker
 compiles and packages it into a `.vpk` mod file. You do not need to know how to program, use a
 command line, or manually run any modding tools.
 
-As of right now, v1.0.0, Deadlock Mod Maker only supports sounds. Altering models and other complex assets
-is on my list of TODOs, but these are much more involved for a standalone app. I do plan on incrementally releasing
-new builds with new features pertaining to other mediums outside of sounds eventually.
+The supported v1.0.0 workflow is sound replacement. An early Visuals workspace is included for
+texture and material experiments, but it is a preview feature rather than part of the supported
+1.0 workflow. Models and other complex assets remain future work.
 
 > Deadlock Mod Maker is a project made by me alone and is in no way affiliated with Valve.
 
@@ -16,7 +16,8 @@ new builds with new features pertaining to other mediums outside of sounds event
 
 ## What it does
 
-- Searches every sound and texture in Deadlock (about 95,000 files) without unpacking the game.
+- Searches Deadlock's sounds without unpacking the game. The preview Visuals workspace can also
+  index textures and materials.
 - Previews the original sound, and your replacement, side by side with a waveform editor.
 - Allows you to trim, fade, normalize and loop audio for you. For more advanced audio tweaks, consider something like Audacity.
 - Packages everything into one `.vpk` file and verifies the contents before saying it worked.
@@ -29,19 +30,19 @@ mod files into its own folder. Installing the finished mod is a manual step you 
 
 ## Install
 
-### Step 1 — Download the app
+### Step 1 - Download the app
 
 Go to the [Releases page](https://github.com/nickf1130/deadlock-mod-maker/releases) and download
 the file named `DeadlockModMaker-<version>-portable.exe`.
 
-Put it in a folder of its own — for example `C:\DeadlockModMaker\`. The app creates its settings,
+Put it in a folder of its own - for example `C:\DeadlockModMaker\`. The app creates its settings,
 projects and exports folders next to the `.exe`, so give it somewhere tidy to live. Do **not** run
 it from your Downloads folder. 
 
 This app is **not** code-signed. Windows may show a blue "Windows protected your PC" warning.
 Click **More info**, then **Run anyway**.
 
-### Step 2 — Get the Deadlock modding toolkit (CSDK)
+### Step 2 - Get the Deadlock modding toolkit (CSDK)
 
 Deadlock Mod Maker does not come bundled with the CSDK12 zip. Please visit:
 
@@ -51,7 +52,7 @@ You need the **Deadlock CSDK 12** (also distributed as "Reduced CSDK 12") in ord
 
 You should end up with a folder that contains `csdkcfg.exe` and a `game` folder inside it.
 
-### Step 3 — Run the app and finish the checklist
+### Step 3 - Run the app and finish the checklist
 
 Double-click the `.exe`. The first time it opens, a **Set up required tools** checklist appears.
 It will not let you continue until everything on it is green.
@@ -61,7 +62,7 @@ Work down the list:
 1. **Click "Download all requirements".** This fetches FFmpeg and Source 2 Viewer automatically
    and installs them into the app's own `tools` folder. This handles most of the list for you.
 2. **Click "Choose CSDK folder"** and select the CSDK 12 folder from Step 2. Pick the top-level
-   folder — the one containing `csdkcfg.exe`.
+   folder - the one containing `csdkcfg.exe`.
 3. **Click "Choose Deadlock folder"** and select your Deadlock install. If you are not sure where
    it is, open Steam, right-click Deadlock, then **Manage → Browse local files**; the folder that
    opens is the one to pick.
@@ -71,7 +72,7 @@ Work down the list:
 
 Nothing you select here is copied or modified. The app just remembers where the files are so it can access them later.
 
-### Step 4 — Wait for the first scan
+### Step 4 - Wait for the first scan
 
 The app now reads Deadlock's archive and builds a searchable index. This takes a few minutes the
 first time and only happens once. A progress bar shows what it is doing. On a game update, this archive may need
@@ -83,7 +84,7 @@ to rebuild.
 
 1. **Create a project.** Go to **Projects**, type a name (for example `my first mod`), and click
    **Create**. A project is just a container for the replacements you want to ship together.
-2. **Find something to replace.** Go to **Sounds** (or **Visuals**) and search — try a hero name
+2. **Find something to replace.** Go to **Sounds** and search - try a hero name
    like `abrams`. Click a result to select it.
 3. **Listen to the original.** Click **Export & preview original** to hear what is currently in
    the game.
@@ -92,7 +93,7 @@ to rebuild.
 5. **Confirm it.** Click the confirm button to add the replacement to your project.
 6. **Build it.** Go back to **Projects**, then click **Build & export**, then **Process project**.
 7. **Collect the file.** When it finishes you will see **Export complete**. Click **Open export
-   folder** — your `.vpk` is inside.
+   folder** - your `.vpk` is inside.
 
 ---
 
@@ -132,7 +133,7 @@ Game updates can change or move the files your mod replaced, which may break it.
 
 After an update, open the app. If anything is affected, the **Overview** page shows a warning
 listing the projects built against the older version. Open a project, click **Check game update**,
-and if repairs are available click **Repair and rebuild** — the app re-points each replacement at
+and if repairs are available click **Repair and rebuild** - the app re-points each replacement at
 the current file and opens the export dialog so you can build a fresh `.vpk`.
 
 Anything it cannot match automatically is listed for you to fix by hand.
@@ -146,12 +147,13 @@ The app is not code-signed. Click **More info → Run anyway**.
 
 **The setup checklist will not go green**
 Every red ✗ row has a button on the right that tells you which file it wants. The most common
-mistake is selecting the wrong CSDK level — pick the folder containing `csdkcfg.exe`, not a folder
+mistake is selecting the wrong CSDK level - pick the folder containing `csdkcfg.exe`, not a folder
 inside it. Note that **Source 2 Viewer CLI** is a separate file from the Source 2 Viewer app;
 "Download all requirements" fetches both.
 
 **The build fails**
-Open **Build & export** and expand **Per-item build logs**. Each replacement shows the exact tool
+Open **Projects**, click the project's **Build & export** button, and expand **Per-item build
+logs**. Each replacement shows the exact tool
 that ran and what it printed, which usually names the problem file. **Retry failed items**
 rebuilds only what failed.
 
@@ -180,13 +182,13 @@ SHA-256 digest where one is published, and installed into the app's own `tools` 
 
 ## Building from source
 
-For developers only — if you just want to use the app, download the release above.
+For developers only - if you just want to use the app, download the release above.
 
-Requirements: Windows 10/11, Node.js 20+, Python 3.12+.
+Requirements: Windows 10/11, Node.js 20.19+ (or 22.12+), and Python 3.12 or 3.13.
 
 ```powershell
-npm install
-python -m pip install -e ".\python[dev]"
+npm ci
+npm run python:sync
 ```
 
 Run in development:
@@ -200,22 +202,24 @@ Run the checks:
 ```powershell
 npm run typecheck
 npm run test:all
+npm run audit:python
 ```
 
 Produce a portable Windows build in `release/`:
 
 ```powershell
-npm run build
-npm run build:python
 npm run dist
 ```
 
+`npm run dist` creates a clean, pinned Python environment before packaging, verifies the
+portable layout, and writes a `.sha256` checksum beside the executable.
+
 ### How it fits together
 
-- **Electron main process** — window, IPC, file dialogs, and supervision of the Python worker.
+- **Electron main process** - window, IPC, file dialogs, and supervision of the Python worker.
   `contextIsolation` is on, the renderer has no Node integration, and IPC is allowlisted.
-- **React renderer** — the interface. Talks only to the allowlisted IPC surface.
-- **Python worker** — indexing, audio and texture processing, CSDK compilation, VPK packaging and
+- **React renderer** - the interface. Talks only to the allowlisted IPC surface.
+- **Python worker** - indexing, audio and texture processing, CSDK compilation, VPK packaging and
   verification. Speaks newline-delimited JSON-RPC over stdin/stdout.
 
 A build is reported successful only when every enabled item compiled to its expected target, the
@@ -230,7 +234,9 @@ More detail lives in [SETUP.md](SETUP.md).
 
 Deadlock Mod Maker is free software released under the **GNU General Public License, version 3 or
 later**. You may use, study, share and modify it. If you distribute a modified version, it must
-also be released under the GPL with its source available. The full terms are in [LICENSE](LICENSE).
+also be released under the GPL with its source available. The full terms are in
+[LICENSE.md](LICENSE.md). Bundled font attribution is in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without
 even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.

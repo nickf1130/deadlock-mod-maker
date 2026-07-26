@@ -97,13 +97,15 @@ code {
   font-family: "Google Sans";
 }
 
-/* The shell mounts at rest; the boot screen fading out over it is the
-   transition, so animating both would double up. */
+/* The shell reveal is deliberately subtle because the boot screen also fades.
+   Keeping the named animation here makes the hand-off feel continuous on fast
+   and slow machines alike. */
 .app-shell {
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr);
   height: 100vh;
   background: var(--background);
+  animation: app-shell-reveal 220ms ease-out both;
 }
 
 .sidebar {
@@ -175,7 +177,8 @@ code {
   font-size: 12px;
   font-weight: 500;
   min-height: 38px;
-  transition: color 120ms ease,
+  transition: transform 120ms ease,
+    color 120ms ease,
     background-color 120ms ease,
     border-color 120ms ease;
 }
@@ -183,6 +186,7 @@ code {
 .sidebar nav button:hover {
   background: #171717;
   color: #f5f5f5;
+  transform: translateX(2px);
 }
 
 .sidebar nav button.active {
@@ -261,6 +265,7 @@ code {
 }
 
 .topbar {
+  view-transition-name: page-header;
   height: var(--topbar-height);
   flex: 0 0 var(--topbar-height);
   border-bottom: 1px solid var(--border-soft);
@@ -301,6 +306,7 @@ code {
 /* Switching views crossfades the content area. Only the pane that actually
    changes moves; the chrome around it stays put. */
 .content {
+  view-transition-name: page-content;
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -2373,8 +2379,33 @@ input[type="radio"] {
   }
 }
 
+@keyframes app-shell-reveal {
+  from {
+    opacity: 0;
+  }
+}
+
 @keyframes page-content-in {
   from {
+    opacity: 0;
+  }
+}
+
+::view-transition-old(page-header),
+::view-transition-new(page-header) {
+  animation: none;
+}
+
+::view-transition-old(page-content) {
+  animation: page-content-out 100ms ease-in both;
+}
+
+::view-transition-new(page-content) {
+  animation: page-content-in 180ms ease-out both;
+}
+
+@keyframes page-content-out {
+  to {
     opacity: 0;
   }
 }

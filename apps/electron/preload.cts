@@ -34,6 +34,7 @@ export type StudioApi = {
     assetName: string | null;
     assetUrl: string | null;
     assetSize: number | null;
+    assetDigest: string | null;
     canInstall: boolean;
     status: "available" | "current" | "noReleases";
   }>;
@@ -41,6 +42,7 @@ export type StudioApi = {
   openExternal: (
     kind: "repository" | "profile" | "releases" | "issues"
   ) => Promise<void>;
+  openLicenses: () => Promise<void>;
   openPath: (path: string) => Promise<void>;
   mediaUrl: (path: string) => Promise<string>;
   droppedFilePath: (file: File) => Promise<string>;
@@ -63,6 +65,7 @@ const api: StudioApi = {
   checkForUpdates: () => ipcRenderer.invoke("updates:check"),
   installUpdate: () => ipcRenderer.invoke("updates:install"),
   openExternal: (kind) => ipcRenderer.invoke("external:open", kind),
+  openLicenses: () => ipcRenderer.invoke("licenses:open"),
   openPath: (targetPath) => ipcRenderer.invoke("path:open", targetPath),
   mediaUrl: (targetPath) => ipcRenderer.invoke("media:url", targetPath),
   droppedFilePath: (file) => ipcRenderer.invoke("drop:approve", webUtils.getPathForFile(file)),
