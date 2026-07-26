@@ -8,7 +8,7 @@ command line, or manually run any modding tools.
 
 Deadlock Mods are currently a gray area; use this and related tools at your own risk!
 
-> NOTE: Deadlock Mod Maker is a project made by me alone and is in no way affiliated with Valve.
+> NOTE: Deadlock Mod Maker is a project made by me alone and is in no way affiliated with Valve or related projects.
 
 ---
 
@@ -141,10 +141,10 @@ Anything it cannot match automatically is listed for you to fix by hand.
 ## Troubleshooting
 
 **"Windows protected your PC"**
-The app is not code-signed. Click **More info → Run anyway**.
+The app is not code-signed yet. Click **More info → Run anyway**.
 
 **The setup checklist will not go green**
-Every red ✗ row has a button on the right that tells you which file it wants. The most common
+Every red X row has a button on the right that tells you which file it wants. The most common
 mistake is selecting the wrong CSDK level - pick the folder containing `csdkcfg.exe`, not a folder
 inside it. Note that **Source 2 Viewer CLI** is a separate file from the Source 2 Viewer app;
 "Download all requirements" fetches both.
