@@ -173,8 +173,10 @@ include the contents of the `logs` folder next to the `.exe`.
 | FFmpeg / FFprobe | Downloaded by the app when you click **Download all requirements**. |
 | Source 2 Viewer + CLI | Downloaded by the app when you click **Download all requirements**. |
 
-Downloads only ever start when you press that button. They are checked against the publisher's
-SHA-256 digest where one is published, and installed into the app's own `tools` folder.
+Downloads only ever start when you press that button. Each one must come from its publisher's own
+GitHub release over HTTPS and must match the SHA-256 digest that release publishes; anything that
+fails either check is discarded instead of installed. Verified tools are installed into the app's
+own `tools` folder.
 
 ---
 

@@ -4,8 +4,10 @@ import hashlib
 import json
 import os
 import platform
+import re
 import shutil
 import urllib.error
+import urllib.parse
 import urllib.request
 import uuid
 import zipfile
@@ -18,13 +20,17 @@ from .models import Settings
 from .paths import AppPaths
 from .settings import save_settings
 
+SOURCE2_REPOSITORY = "ValveResourceFormat/ValveResourceFormat"
 SOURCE2_RELEASE_API = (
     "https://api.github.com/repos/ValveResourceFormat/"
     "ValveResourceFormat/releases/latest"
 )
+FFMPEG_REPOSITORY = "BtbN/FFmpeg-Builds"
 FFMPEG_RELEASE_API = (
     "https://api.github.com/repos/BtbN/FFmpeg-Builds/releases/latest"
 )
+RELEASE_ASSET_HOST = "github.com"
+SHA256_DIGEST = re.compile(r"^sha256:([0-9a-f]{64})$", re.IGNORECASE)
 USER_AGENT = "Deadlock-Mod-Maker/1.0.0"
 MAX_EXTRACTED_BYTES = 2_000_000_000
 MAX_ARCHIVE_FILES = 20_000
@@ -107,6 +113,7 @@ def install_missing_requirements(
                     completed,
                     total,
                     progress,
+                    SOURCE2_REPOSITORY,
                 )
                 source_staging.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(
@@ -136,6 +143,7 @@ def install_missing_requirements(
                     completed,
                     total,
                     progress,
+                    SOURCE2_REPOSITORY,
                 )
                 source_staging.mkdir(parents=True, exist_ok=True)
                 _extract_zip(downloaded, source_staging)
@@ -176,6 +184,7 @@ def install_missing_requirements(
                 completed,
                 total,
                 progress,
+                FFMPEG_REPOSITORY,
             )
             extracted = work_root / "ffmpeg-extracted"
             _extract_zip(downloaded, extracted)
@@ -315,16 +324,61 @@ def _required_asset(
     return asset
 
 
+def _assert_trusted_asset_url(url: str, repository: str, name: str) -> None:
+    """Reject any asset URL that is not an HTTPS download from the publisher.
+
+    The release metadata is fetched over HTTPS, but nothing in the response is
+    inherently trustworthy: the download URL is just a string. Pinning the
+    scheme, host and repository keeps a manipulated response from pointing the
+    installer at another server, or at plain HTTP.
+    """
+    parsed = urllib.parse.urlparse(url)
+    expected_prefix = f"/{repository}/releases/download/"
+    path = urllib.parse.unquote(parsed.path)
+    if (
+        parsed.scheme != "https"
+        or parsed.netloc.casefold() != RELEASE_ASSET_HOST
+        or not path.startswith(expected_prefix)
+        or path.rsplit("/", 1)[-1] != name
+    ):
+        raise StudioError(
+            "REQUIREMENTS_UNTRUSTED_ASSET_URL",
+            f"The download link published for {name} does not point at the "
+            f"{repository} releases on {RELEASE_ASSET_HOST}.",
+            {"url": url},
+        )
+
+
+def _expected_sha256(asset: dict[str, object], name: str) -> str:
+    """Return the publisher's SHA-256 digest, refusing to proceed without one.
+
+    These downloads are executables the app later runs, so an unverifiable
+    asset is treated as a failure rather than installed on trust.
+    """
+    match = SHA256_DIGEST.match(str(asset.get("digest") or "").strip())
+    if not match:
+        raise StudioError(
+            "REQUIREMENTS_DIGEST_MISSING",
+            f"The publisher's latest release does not publish a SHA-256 "
+            f"digest for {name}, so it cannot be verified before use.",
+        )
+    return match.group(1).casefold()
+
+
 def _download_asset(
     asset: dict[str, object],
     destination: Path,
     completed: int,
     total: int,
     progress: ProgressCallback | None,
+    repository: str,
 ) -> Path:
     url = str(asset["browser_download_url"])
     name = str(asset["name"])
-    expected_digest = str(asset.get("digest") or "")
+    # Both checks run before the transfer starts so an untrusted or
+    # unverifiable asset never reaches the disk.
+    _assert_trusted_asset_url(url, repository, name)
+    expected_digest = _expected_sha256(asset, name)
     destination.parent.mkdir(parents=True, exist_ok=True)
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     digest = hashlib.sha256()
@@ -372,10 +426,7 @@ def _download_asset(
             {"url": url},
         ) from error
     actual = digest.hexdigest()
-    if (
-        expected_digest.startswith("sha256:")
-        and actual.casefold() != expected_digest[7:].casefold()
-    ):
+    if actual.casefold() != expected_digest:
         destination.unlink(missing_ok=True)
         raise StudioError(
             "REQUIREMENTS_CHECKSUM_FAILED",

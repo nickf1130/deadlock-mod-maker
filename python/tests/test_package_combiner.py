@@ -113,6 +113,148 @@ def test_requirement_zip_extraction_preserves_tool_files(tmp_path: Path):
     assert (destination / "release/bin/avcodec.dll").read_bytes() == b"dll"
 
 
+SOURCE2_ASSET_URL = (
+    "https://github.com/ValveResourceFormat/ValveResourceFormat"
+    "/releases/download/19.2/Source2Viewer.exe"
+)
+
+
+def test_trusted_asset_url_accepts_the_publisher_release_download():
+    requirements._assert_trusted_asset_url(
+        SOURCE2_ASSET_URL,
+        requirements.SOURCE2_REPOSITORY,
+        "Source2Viewer.exe",
+    )
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        # Plain HTTP, even on the right host.
+        SOURCE2_ASSET_URL.replace("https://", "http://"),
+        # A lookalike host, and a host smuggled into the userinfo field.
+        SOURCE2_ASSET_URL.replace("github.com", "github.com.evil.invalid"),
+        SOURCE2_ASSET_URL.replace("github.com", "github.com@evil.invalid"),
+        # The right host, but another repository's release.
+        SOURCE2_ASSET_URL.replace(
+            "ValveResourceFormat/ValveResourceFormat", "attacker/payload"
+        ),
+        # The right release, but a different file than the one requested.
+        SOURCE2_ASSET_URL.replace("Source2Viewer.exe", "payload.exe"),
+    ],
+)
+def test_trusted_asset_url_rejects_urls_off_the_publisher_release(url: str):
+    with pytest.raises(Exception, match="does not point at"):
+        requirements._assert_trusted_asset_url(
+            url, requirements.SOURCE2_REPOSITORY, "Source2Viewer.exe"
+        )
+
+
+@pytest.mark.parametrize(
+    "digest",
+    [None, "", "md5:abc", "sha256:not-a-digest", "sha256:" + "a" * 63],
+)
+def test_expected_sha256_refuses_assets_without_a_usable_digest(digest):
+    with pytest.raises(Exception, match="SHA-256"):
+        requirements._expected_sha256(
+            {"digest": digest}, "Source2Viewer.exe"
+        )
+
+
+def test_expected_sha256_returns_the_published_digest():
+    assert (
+        requirements._expected_sha256(
+            {"digest": "sha256:" + "A" * 64}, "Source2Viewer.exe"
+        )
+        == "a" * 64
+    )
+
+
+def test_download_asset_rejects_bad_metadata_before_any_network_request(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    def fail_if_called(*_args, **_kwargs):
+        raise AssertionError("the download must not start")
+
+    monkeypatch.setattr(requirements.urllib.request, "urlopen", fail_if_called)
+    destination = tmp_path / "Source2Viewer.exe"
+
+    # An untrusted URL is refused even when a digest is present.
+    with pytest.raises(Exception, match="does not point at"):
+        requirements._download_asset(
+            {
+                "name": "Source2Viewer.exe",
+                "browser_download_url": "https://evil.invalid/Source2Viewer.exe",
+                "digest": "sha256:" + "a" * 64,
+            },
+            destination,
+            0,
+            1,
+            None,
+            requirements.SOURCE2_REPOSITORY,
+        )
+
+    # A trusted URL with no digest is refused rather than installed on trust.
+    with pytest.raises(Exception, match="SHA-256"):
+        requirements._download_asset(
+            {
+                "name": "Source2Viewer.exe",
+                "browser_download_url": SOURCE2_ASSET_URL,
+            },
+            destination,
+            0,
+            1,
+            None,
+            requirements.SOURCE2_REPOSITORY,
+        )
+
+    assert not destination.exists()
+
+
+def test_download_asset_discards_a_file_that_fails_its_digest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    payload = b"tampered-installer"
+
+    class FakeResponse:
+        headers = {"Content-Length": str(len(payload))}
+
+        def __init__(self) -> None:
+            self._body = payload
+
+        def read(self, _size: int) -> bytes:
+            block, self._body = self._body, b""
+            return block
+
+        def __enter__(self) -> FakeResponse:
+            return self
+
+        def __exit__(self, *_args) -> None:
+            return None
+
+    monkeypatch.setattr(
+        requirements.urllib.request, "urlopen", lambda *_a, **_k: FakeResponse()
+    )
+    destination = tmp_path / "Source2Viewer.exe"
+
+    with pytest.raises(Exception, match="did not match"):
+        requirements._download_asset(
+            {
+                "name": "Source2Viewer.exe",
+                "browser_download_url": SOURCE2_ASSET_URL,
+                # A valid digest that this payload does not hash to.
+                "digest": "sha256:" + "b" * 64,
+            },
+            destination,
+            0,
+            1,
+            None,
+            requirements.SOURCE2_REPOSITORY,
+        )
+
+    assert not destination.exists()
+
+
 def test_requirement_installer_places_and_verifies_all_downloadable_tools(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
@@ -124,15 +266,24 @@ def test_requirement_installer_places_and_verifies_all_downloadable_tools(
     assets = {
         "Source2Viewer.exe": {
             "name": "Source2Viewer.exe",
-            "browser_download_url": "https://example.invalid/Source2Viewer.exe",
+            "browser_download_url": (
+                "https://github.com/ValveResourceFormat/ValveResourceFormat"
+                "/releases/download/19.2/Source2Viewer.exe"
+            ),
         },
         "cli-windows-x64.zip": {
             "name": "cli-windows-x64.zip",
-            "browser_download_url": "https://example.invalid/cli.zip",
+            "browser_download_url": (
+                "https://github.com/ValveResourceFormat/ValveResourceFormat"
+                "/releases/download/19.2/cli-windows-x64.zip"
+            ),
         },
         "ffmpeg-master-latest-win64-gpl-shared.zip": {
             "name": "ffmpeg-master-latest-win64-gpl-shared.zip",
-            "browser_download_url": "https://example.invalid/ffmpeg.zip",
+            "browser_download_url": (
+                "https://github.com/BtbN/FFmpeg-Builds/releases/download"
+                "/latest/ffmpeg-master-latest-win64-gpl-shared.zip"
+            ),
         },
     }
 
@@ -145,6 +296,7 @@ def test_requirement_installer_places_and_verifies_all_downloadable_tools(
         _completed: int,
         _total: int,
         _progress,
+        _repository: str,
     ) -> Path:
         destination.parent.mkdir(parents=True, exist_ok=True)
         name = str(asset["name"])
