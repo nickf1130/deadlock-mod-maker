@@ -18,6 +18,7 @@ __pycache__/
 venv/
 python/build/
 python/dist/
+python/.venv-release/
 
 # /build is electron-builder's buildResources directory and holds the app icon,
 # which must be committed. Only ignore stray build output inside it.
