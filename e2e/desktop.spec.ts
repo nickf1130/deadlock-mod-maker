@@ -166,7 +166,7 @@ test("desktop shell exposes the consolidated roadmap workflow", async ({}, testI
     await expect(navigation).toHaveText([
       "Overview",
       "Sounds",
-      "Visuals",
+      "Visuals (WIP)",
       "Projects",
       "PAK Combiner",
       "Diagnostics",
