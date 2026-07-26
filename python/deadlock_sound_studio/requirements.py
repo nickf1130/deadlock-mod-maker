@@ -285,6 +285,11 @@ def install_missing_requirements(
         ) from error
     finally:
         shutil.rmtree(work_root, ignore_errors=True)
+        for empty_directory in (work_root.parent, paths.cache):
+            try:
+                empty_directory.rmdir()
+            except OSError:
+                pass
 
 
 def _release_assets(api_url: str) -> dict[str, dict[str, object]]:
@@ -461,6 +466,7 @@ def _copy_directory_contents(source: Path, destination: Path) -> None:
 
 def _replace_owned_directory(source: Path, destination: Path) -> None:
     """Swap an app-owned tool directory and restore it if the swap fails."""
+    destination.parent.mkdir(parents=True, exist_ok=True)
     temporary = destination.with_name(
         f".{destination.name}.{uuid.uuid4().hex}.installing"
     )

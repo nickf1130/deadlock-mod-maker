@@ -36,6 +36,12 @@ from ..visuals import inspect_visual_source
 from ..vpk import list_vpk
 
 
+def _optional_path(value: str | None) -> Path | None:
+    if value is None:
+        return None
+    return Path(value)
+
+
 class ParamsModel(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
@@ -233,14 +239,18 @@ class BackendRouter:
 
     def _diagnostics(self, *, emit_progress: bool = False):
         """Run tool discovery only for operations that actually need tools."""
+        progress = None
+        if emit_progress:
+            progress = self.emit_event
         return run_diagnostics(
             self.paths,
             load_settings(self.paths),
-            self.emit_event if emit_progress else None,
+            progress,
         )
 
     def bootstrap(self, raw: dict[str, Any]) -> dict[str, Any]:
         ParamsModel.model_validate(raw)
+        self.projects.clear_exported_build_artifacts()
         settings = load_settings(self.paths)
         diagnostics = self._diagnostics(emit_progress=True)
         sound_count = self.database.count_assets()
@@ -365,7 +375,7 @@ class BackendRouter:
             Path(params.source_path),
             params.processing,
             params.looping,
-            Path(ffprobe) if ffprobe else None,
+            _optional_path(ffprobe),
         ).model_dump(by_alias=True)
 
     def confirm_visual_replacement(self, raw: dict[str, Any]) -> dict[str, Any]:
@@ -417,7 +427,7 @@ class BackendRouter:
             params.project_id,
             params.item_id,
             Path(params.source_path),
-            Path(ffprobe) if ffprobe else None,
+            _optional_path(ffprobe),
         ).model_dump(by_alias=True)
 
     def duplicate_settings(self, raw: dict[str, Any]) -> dict[str, Any]:
@@ -470,15 +480,17 @@ class BackendRouter:
                 )
                 if not item.target.asset_fingerprint:
                     exact = current.archive_fingerprint == item.target.archive_fingerprint
-                status = "exactMatch" if exact else "changedAsset"
+                status = "changedAsset"
+                if exact:
+                    status = "exactMatch"
                 # The path still exists, so the fix is to re-point the item at
                 # whatever now lives there. Offering it as a candidate lets the
                 # UI repair changed and relocated assets through one code path.
-                candidates: list[dict[str, Any]] = (
-                    []
-                    if exact
-                    else [{"asset": current.model_dump(by_alias=True), "score": 1.0}]
-                )
+                candidates: list[dict[str, Any]] = []
+                if not exact:
+                    candidates.append(
+                        {"asset": current.model_dump(by_alias=True), "score": 1.0}
+                    )
             else:
                 status = "missing"
                 scored = sorted(
@@ -565,7 +577,7 @@ class BackendRouter:
         diagnostics = self._diagnostics()
         cli = diagnostics.resolved.source2_viewer_cli
         exported = export_visual_preview(
-            Path(cli) if cli else None,
+            _optional_path(cli),
             self.paths,
             asset,
         )
@@ -580,12 +592,12 @@ class BackendRouter:
         diagnostics = self._diagnostics()
         cli = diagnostics.resolved.source2_viewer_cli
         preview = export_sound_preview(
-            Path(cli) if cli else None,
+            _optional_path(cli),
             self.paths,
             asset,
         )
         ffprobe = diagnostics.resolved.ffprobe
-        metadata = inspect_audio(preview, Path(ffprobe) if ffprobe else None)
+        metadata = inspect_audio(preview, _optional_path(ffprobe))
         metadata.preview_path = str(preview)
         return metadata.model_dump(by_alias=True)
 
@@ -595,7 +607,7 @@ class BackendRouter:
         ffprobe = diagnostics.resolved.ffprobe
         return inspect_audio(
             Path(params.path),
-            Path(ffprobe) if ffprobe else None,
+            _optional_path(ffprobe),
         ).model_dump(by_alias=True)
 
     def preview_processed(self, raw: dict[str, Any]) -> dict[str, Any]:
@@ -607,8 +619,8 @@ class BackendRouter:
             Path(params.path),
             output,
             params.processing,
-            Path(resolved.ffmpeg) if resolved.ffmpeg else None,
-            Path(resolved.ffprobe) if resolved.ffprobe else None,
+            _optional_path(resolved.ffmpeg),
+            _optional_path(resolved.ffprobe),
         ).model_dump(by_alias=True)
 
     def preview_csv(self, raw: dict[str, Any]) -> list[dict[str, Any]]:

@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { once } from "node:events";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,6 +8,15 @@ import { _electron as electron } from "playwright";
 
 const workspace = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const VPK_SIGNATURE = 0x55aa1234;
+
+async function pathExists(candidate: string): Promise<boolean> {
+  try {
+    await access(candidate);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 async function writeVpk(target: string, entries: Record<string, Buffer>): Promise<void> {
   const grouped = new Map<string, Map<string, Array<{ filename: string; payload: Buffer }>>>();
@@ -109,6 +118,8 @@ test("desktop shell exposes the consolidated roadmap workflow", async ({}, testI
     const page = await application.firstWindow();
     await expect(page.locator(".app-shell")).toBeVisible({ timeout: 30_000 });
     await page.evaluate(() => document.fonts.ready);
+    await expect(page.locator(".brand .brand-mark img")).toHaveCSS("width", "21px");
+    await expect(page.locator("body")).toHaveCSS("font-size", "16px");
     expect(
       await page.evaluate(() => ({
         regular: document.fonts.check('400 16px "Google Sans"'),
@@ -269,7 +280,7 @@ test("desktop shell exposes the consolidated roadmap workflow", async ({}, testI
     expect(await page.evaluate(() => typeof window.studio.selectFfmpeg)).toBe("function");
     expect(await page.locator(".diagnostic-row .status").first().textContent()).toBe("");
     await expect(page.locator(".diagnostic-checklist")).toHaveCSS("border-radius", "12px");
-    await expect(page.locator(".diagnostic-copy strong").first()).toHaveCSS("font-size", "13px");
+    await expect(page.locator(".diagnostic-copy strong").first()).toHaveCSS("font-size", "15px");
     await expect(page.locator(".diagnostic-copy code").first()).toHaveCSS(
       "font-family",
       "\"Google Sans\""
@@ -312,6 +323,9 @@ test("desktop shell exposes the consolidated roadmap workflow", async ({}, testI
     });
     await page.getByRole("button", { name: "Close build and export" }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Delete Recoverable Test Mod" })
+    ).toHaveCSS("border-top-color", "rgb(38, 38, 38)");
     await page.getByRole("button", { name: "Delete Recoverable Test Mod" }).click();
     const deleteDialog = page.getByRole("alertdialog", {
       name: "Delete Recoverable Test Mod?"
@@ -319,6 +333,10 @@ test("desktop shell exposes the consolidated roadmap workflow", async ({}, testI
     await expect(deleteDialog).toBeVisible();
     await deleteDialog.getByRole("button", { name: "Delete project" }).click();
     await expect(page.getByRole("button", { name: "Delete Recoverable Test Mod" })).toHaveCount(0);
+    expect(await pathExists(path.join(appData, "projects"))).toBe(false);
+    expect(await pathExists(path.join(appData, "tools"))).toBe(false);
+    expect(await pathExists(path.join(appData, "logs"))).toBe(false);
+    expect(await pathExists(path.join(appData, "cache"))).toBe(false);
 
     await page.getByRole("button", { name: "About", exact: true }).click();
     await expect(page.getByRole("heading", { name: /Deadlock Mod Maker/ })).toBeVisible();

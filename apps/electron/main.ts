@@ -1,4 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, shell } from "electron";
+import type { BrowserWindowConstructorOptions } from "electron";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -18,12 +19,27 @@ import {
 const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(moduleDirectory, "..");
 const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL);
-const testAppRoot = !app.isPackaged ? process.env.DSS_TEST_APP_ROOT : undefined;
-const appRoot = testAppRoot
-  ? path.resolve(testAppRoot)
-  : isDevelopment
-    ? projectRoot
-    : path.resolve(process.env.PORTABLE_EXECUTABLE_DIR ?? path.dirname(process.execPath));
+
+function resolveAppRoot(): string {
+  if (!app.isPackaged && process.env.DSS_TEST_APP_ROOT) {
+    return path.resolve(process.env.DSS_TEST_APP_ROOT);
+  }
+  if (isDevelopment) {
+    return projectRoot;
+  }
+  if (process.env.PORTABLE_EXECUTABLE_DIR) {
+    return path.resolve(process.env.PORTABLE_EXECUTABLE_DIR);
+  }
+  return path.resolve(path.dirname(process.execPath));
+}
+
+const appRoot = resolveAppRoot();
+const electronProfileRoot = path.join(appRoot, "data", "electron-profile");
+mkdirSync(electronProfileRoot, { recursive: true });
+app.setPath("userData", electronProfileRoot);
+log.transports.file.level = "error";
+log.transports.file.resolvePathFn = () => path.join(appRoot, "logs", "main.log");
+
 const mediaTokens = new Map<string, string>();
 const approvedSelections = new Set<string>();
 const approvedOutputs = new Set<string>();
@@ -61,14 +77,13 @@ function createWindow(): void {
   // electron-builder stamps from build/icon.png. Development runs have no such
   // executable, so point the window at the source image directly.
   const developmentIcon = path.join(projectRoot, "build", "icon.png");
-  mainWindow = new BrowserWindow({
+  const windowOptions: BrowserWindowConstructorOptions = {
     title: "Deadlock Mod Maker",
     width: 1440,
     height: 900,
     minWidth: 1100,
     minHeight: 700,
     backgroundColor: "#0a0a0a",
-    ...(!app.isPackaged && existsSync(developmentIcon) ? { icon: developmentIcon } : {}),
     show: false,
     webPreferences: {
       preload: path.join(moduleDirectory, "preload.cjs"),
@@ -78,12 +93,18 @@ function createWindow(): void {
       webSecurity: true,
       backgroundThrottling: false
     }
-  });
+  };
+  if (!app.isPackaged && existsSync(developmentIcon)) {
+    windowOptions.icon = developmentIcon;
+  }
+  mainWindow = new BrowserWindow(windowOptions);
   mainWindow.on("closed", () => {
     mainWindow = null;
   });
   mainWindow.once("ready-to-show", () => {
-    if (!uiSmoke) mainWindow?.show();
+    if (!uiSmoke) {
+      mainWindow?.show();
+    }
   });
   mainWindow.webContents.on(
     "did-fail-load",
@@ -98,12 +119,12 @@ function createWindow(): void {
     }
   );
   mainWindow.webContents.on("console-message", (details) => {
-    const write =
-      details.level === "error"
-        ? log.error
-        : details.level === "warning"
-          ? log.warn
-          : log.info;
+    let write = log.info;
+    if (details.level === "error") {
+      write = log.error;
+    } else if (details.level === "warning") {
+      write = log.warn;
+    }
     write.call(log, `[renderer] ${details.message}`, {
       line: details.lineNumber,
       sourceId: details.sourceId
@@ -126,13 +147,17 @@ function createWindow(): void {
       )
       .then((snapshot) => log.info("Renderer startup snapshot", snapshot))
       .catch((error) => log.error("Could not inspect renderer startup", error));
-    if (uiSmoke && mainWindow) void captureUiSmoke(mainWindow);
+    if (uiSmoke && mainWindow) {
+      void captureUiSmoke(mainWindow);
+    }
   });
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   mainWindow.webContents.on("will-navigate", (event, url) => {
     const allowedDev = isDevelopment && url.startsWith(process.env.VITE_DEV_SERVER_URL ?? "");
     const allowedFile = !isDevelopment && url.startsWith("file:");
-    if (!allowedDev && !allowedFile) event.preventDefault();
+    if (!allowedDev && !allowedFile) {
+      event.preventDefault();
+    }
   });
   if (isDevelopment) {
     void mainWindow
@@ -161,13 +186,15 @@ async function captureUiSmoke(window: BrowserWindow): Promise<void> {
       writeFileSync(output, image.toPNG());
       log.info("UI smoke capture complete", { output });
       const openedSounds = await window.webContents.executeJavaScript(
-        `(() => {
-          const button = [...document.querySelectorAll(".sidebar nav button")]
-            .find((candidate) => candidate.textContent?.trim() === "Sounds");
-          if (!(button instanceof HTMLElement)) return false;
-          button.click();
-          return true;
-        })()`,
+          `(() => {
+            const button = [...document.querySelectorAll(".sidebar nav button")]
+              .find((candidate) => candidate.textContent?.trim() === "Sounds");
+            if (!(button instanceof HTMLElement)) {
+              return false;
+            }
+            button.click();
+            return true;
+          })()`,
         true
       );
       if (openedSounds) {
@@ -178,7 +205,9 @@ async function captureUiSmoke(window: BrowserWindow): Promise<void> {
              !document.querySelector(".sound-list > .activity-bar.is-active")`,
             true
           );
-          if (settled) break;
+          if (settled) {
+            break;
+          }
           await new Promise((resolve) => setTimeout(resolve, 200));
         }
         await new Promise((resolve) => setTimeout(resolve, 300));
@@ -195,7 +224,9 @@ async function captureUiSmoke(window: BrowserWindow): Promise<void> {
           `(() => {
             const button = [...document.querySelectorAll(".sidebar nav button")]
               .find((candidate) => candidate.textContent?.trim() === "Overview");
-            if (button instanceof HTMLElement) button.click();
+            if (button instanceof HTMLElement) {
+              button.click();
+            }
           })()`,
           true
         );
@@ -228,7 +259,9 @@ function isWithin(child: string, parent: string): boolean {
 }
 
 function isApprovedPath(targetPath: string): boolean {
-  if (approvedSelections.has(targetPath)) return true;
+  if (approvedSelections.has(targetPath)) {
+    return true;
+  }
   const approvedRoots = ["tools", "cache", "projects", "exports", "logs"].map((folder) =>
     path.resolve(appRoot, folder)
   );
@@ -249,7 +282,9 @@ function canonicalOutput(targetPath: string): string {
     throw new Error("Output file must end in .vpk or .pak");
   }
   const parent = canonicalExisting(path.dirname(targetPath));
-  if (!statSync(parent).isDirectory()) throw new Error("Output folder does not exist");
+  if (!statSync(parent).isDirectory()) {
+    throw new Error("Output folder does not exist");
+  }
   return path.join(parent, path.basename(targetPath));
 }
 
@@ -317,18 +352,25 @@ function registerIpc(): void {
     "external:open",
     async (_event, kind: keyof typeof externalPages) => {
       const url = externalPages[kind];
-      if (!url) throw new Error("Unsupported external destination");
+      if (!url) {
+        throw new Error("Unsupported external destination");
+      }
       await shell.openExternal(url);
     }
   );
 
   ipcMain.handle("licenses:open", async () => {
-    const noticePath = app.isPackaged
-      ? path.join(process.resourcesPath, "THIRD_PARTY_NOTICES.md")
-      : path.join(projectRoot, "THIRD_PARTY_NOTICES.md");
-    if (!existsSync(noticePath)) throw new Error("Third-party notices are missing");
+    let noticePath = path.join(projectRoot, "THIRD_PARTY_NOTICES.md");
+    if (app.isPackaged) {
+      noticePath = path.join(process.resourcesPath, "THIRD_PARTY_NOTICES.md");
+    }
+    if (!existsSync(noticePath)) {
+      throw new Error("Third-party notices are missing");
+    }
     const error = await shell.openPath(noticePath);
-    if (error) throw new Error(error);
+    if (error) {
+      throw new Error(error);
+    }
   });
 
   ipcMain.handle("drop:approve", (_event, targetPath: string) => {
@@ -342,7 +384,9 @@ function registerIpc(): void {
   ipcMain.handle(
     "backend:call",
     async (_event, method: BackendMethod, params: Record<string, unknown>) => {
-      if (!BACKEND_ALLOWLIST.has(method)) throw new Error("Backend method is not permitted");
+      if (!BACKEND_ALLOWLIST.has(method)) {
+        throw new Error("Backend method is not permitted");
+      }
       const pathKeysByMethod: Partial<Record<BackendMethod, string[]>> = {
         "audio.inspect": ["path"],
         "audio.previewProcessed": ["path"],
@@ -356,9 +400,13 @@ function registerIpc(): void {
       };
       for (const key of pathKeysByMethod[method] ?? []) {
         const value = params?.[key];
-        if (typeof value !== "string") throw new Error(`Missing approved path: ${key}`);
+        if (typeof value !== "string") {
+          throw new Error(`Missing approved path: ${key}`);
+        }
         const canonical = canonicalExisting(value);
-        if (!approvedSelections.has(canonical)) throw new Error(`Path was not selected by the user: ${key}`);
+        if (!approvedSelections.has(canonical)) {
+          throw new Error(`Path was not selected by the user: ${key}`);
+        }
         params[key] = canonical;
       }
       if (method === "packages.inspect" || method === "packages.combine") {
@@ -367,7 +415,9 @@ function registerIpc(): void {
           throw new Error("Choose at least one package file");
         }
         params.paths = values.map((value) => {
-          if (typeof value !== "string") throw new Error("Package path must be a string");
+          if (typeof value !== "string") {
+            throw new Error("Package path must be a string");
+          }
           const canonical = canonicalExisting(value);
           if (!approvedSelections.has(canonical)) {
             throw new Error("Package path was not selected by the user");
@@ -380,9 +430,13 @@ function registerIpc(): void {
       }
       if (method === "packages.combine") {
         const outputValue = params?.outputPath;
-        if (typeof outputValue !== "string") throw new Error("Missing approved output path");
+        if (typeof outputValue !== "string") {
+          throw new Error("Missing approved output path");
+        }
         const output = canonicalOutput(outputValue);
-        if (!approvedOutputs.has(output)) throw new Error("Output path was not selected by the user");
+        if (!approvedOutputs.has(output)) {
+          throw new Error("Output path was not selected by the user");
+        }
         params.outputPath = output;
       }
       if (method === "settings.save") {
@@ -427,26 +481,31 @@ function registerIpc(): void {
       properties: ["openFile"],
       filters: [{ name: "Audio", extensions: ["wav", "mp3"] }]
     });
-    return result.canceled ? null : approveSelection(result.filePaths[0]);
+    if (result.canceled) {
+      return null;
+    }
+    return approveSelection(result.filePaths[0]);
   });
 
   ipcMain.handle("dialog:visual", async (_event, kind: string) => {
     if (kind !== "texture" && kind !== "material") {
       throw new Error("Unsupported visual resource type");
     }
+    let title = "Choose replacement material";
+    let filter = { name: "Source 2 material", extensions: ["vmat"] };
+    if (kind === "texture") {
+      title = "Choose replacement texture";
+      filter = { name: "Texture source", extensions: ["png", "tga", "psd"] };
+    }
     const result = await dialog.showOpenDialog({
-      title:
-        kind === "texture"
-          ? "Choose replacement texture"
-          : "Choose replacement material",
+      title,
       properties: ["openFile"],
-      filters: [
-        kind === "texture"
-          ? { name: "Texture source", extensions: ["png", "tga", "psd"] }
-          : { name: "Source 2 material", extensions: ["vmat"] }
-      ]
+      filters: [filter]
     });
-    return result.canceled ? null : approveSelection(result.filePaths[0]);
+    if (result.canceled) {
+      return null;
+    }
+    return approveSelection(result.filePaths[0]);
   });
 
   ipcMain.handle("dialog:folder", async () => {
@@ -454,7 +513,10 @@ function registerIpc(): void {
       title: "Choose folder",
       properties: ["openDirectory"]
     });
-    return result.canceled ? null : approveSelection(result.filePaths[0]);
+    if (result.canceled) {
+      return null;
+    }
+    return approveSelection(result.filePaths[0]);
   });
 
   ipcMain.handle("dialog:csv", async () => {
@@ -463,7 +525,10 @@ function registerIpc(): void {
       properties: ["openFile"],
       filters: [{ name: "Mappings", extensions: ["csv", "xlsx"] }]
     });
-    return result.canceled ? null : approveSelection(result.filePaths[0]);
+    if (result.canceled) {
+      return null;
+    }
+    return approveSelection(result.filePaths[0]);
   });
 
   ipcMain.handle("dialog:packages", async () => {
@@ -472,7 +537,10 @@ function registerIpc(): void {
       properties: ["openFile", "multiSelections"],
       filters: [{ name: "Valve packages", extensions: ["vpk", "pak"] }]
     });
-    return result.canceled ? [] : result.filePaths.map(approveSelection);
+    if (result.canceled) {
+      return [];
+    }
+    return result.filePaths.map(approveSelection);
   });
 
   ipcMain.handle("dialog:packageOutput", async () => {
@@ -482,7 +550,9 @@ function registerIpc(): void {
       filters: [{ name: "Valve package", extensions: ["vpk", "pak"] }],
       properties: ["showOverwriteConfirmation", "createDirectory"]
     });
-    if (result.canceled || !result.filePath) return null;
+    if (result.canceled || !result.filePath) {
+      return null;
+    }
     const output = canonicalOutput(result.filePath);
     approvedOutputs.add(output);
     return output;
@@ -501,7 +571,9 @@ function registerIpc(): void {
       properties: ["openFile"],
       filters: [{ name: "Executable", extensions: ["exe"] }]
     });
-    if (result.canceled) return null;
+    if (result.canceled) {
+      return null;
+    }
     const selected = canonicalExisting(result.filePaths[0]);
     if (
       kind === "source2ViewerCli" &&
@@ -518,10 +590,14 @@ function registerIpc(): void {
       properties: ["openFile"],
       filters: [{ name: "FFmpeg executable", extensions: ["exe"] }]
     });
-    if (result.canceled) return null;
+    if (result.canceled) {
+      return null;
+    }
 
     const selected = canonicalExisting(result.filePaths[0]);
-    if (!statSync(selected).isFile()) throw new Error("Choose an FFmpeg executable file");
+    if (!statSync(selected).isFile()) {
+      throw new Error("Choose an FFmpeg executable file");
+    }
     const selectedName = path.basename(selected).toLowerCase();
     if (selectedName !== "ffmpeg.exe" && selectedName !== "ffprobe.exe") {
       throw new Error("Choose ffmpeg.exe or ffprobe.exe from the extracted FFmpeg bin folder");
@@ -543,17 +619,26 @@ function registerIpc(): void {
 
   ipcMain.handle("download:open", async (_event, kind: keyof typeof downloadPages) => {
     const url = downloadPages[kind];
-    if (!url) throw new Error("Unsupported download destination");
+    if (!url) {
+      throw new Error("Unsupported download destination");
+    }
     await shell.openExternal(url);
   });
 
   ipcMain.handle("path:open", async (_event, targetPath: string) => {
     const canonical = canonicalExisting(targetPath);
-    if (!isApprovedPath(canonical)) throw new Error("This path has not been approved");
-    const error = statSync(canonical).isDirectory()
-      ? await shell.openPath(canonical)
-      : await shell.showItemInFolder(canonical);
-    if (typeof error === "string" && error) throw new Error(error);
+    if (!isApprovedPath(canonical)) {
+      throw new Error("This path has not been approved");
+    }
+    let error: string | void;
+    if (statSync(canonical).isDirectory()) {
+      error = await shell.openPath(canonical);
+    } else {
+      error = await shell.showItemInFolder(canonical);
+    }
+    if (typeof error === "string" && error) {
+      throw new Error(error);
+    }
   });
 
   ipcMain.handle("media:url", (_event, targetPath: string) => {
@@ -571,8 +656,12 @@ if (!hasSingleInstanceLock) {
   app.quit();
 } else {
   app.on("second-instance", () => {
-    if (!mainWindow || mainWindow.isDestroyed()) return;
-    if (mainWindow.isMinimized()) mainWindow.restore();
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      return;
+    }
+    if (mainWindow.isMinimized()) {
+      mainWindow.restore();
+    }
     mainWindow.show();
     mainWindow.focus();
   });
@@ -583,7 +672,9 @@ if (!hasSingleInstanceLock) {
     protocol.handle("studio-media", (request) => {
       const token = new URL(request.url).pathname.slice(1);
       const targetPath = mediaTokens.get(token);
-      if (!targetPath) return new Response("Not found", { status: 404 });
+      if (!targetPath) {
+        return new Response("Not found", { status: 404 });
+      }
       return net.fetch(pathToFileURL(targetPath).toString());
     });
     worker = new PythonWorker(
@@ -597,11 +688,15 @@ if (!hasSingleInstanceLock) {
   });
 
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow();
+    }
   });
 
   app.on("window-all-closed", () => {
-    if (process.platform !== "darwin") app.quit();
+    if (process.platform !== "darwin") {
+      app.quit();
+    }
   });
 
   app.on("before-quit", () => worker?.stop());

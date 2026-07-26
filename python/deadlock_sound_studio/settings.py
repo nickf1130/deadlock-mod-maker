@@ -27,4 +27,6 @@ def optional_existing(value: str | None) -> Path | None:
     if not value:
         return None
     path = Path(value).expanduser()
-    return path.resolve() if path.exists() else None
+    if not path.exists():
+        return None
+    return path.resolve()

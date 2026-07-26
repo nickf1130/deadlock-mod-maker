@@ -108,11 +108,14 @@ def read_catalog_metadata(
             if event and event.casefold().startswith(("sound", "sounds")):
                 event = None
             path = _sound_path(reference.group("path"))
+            normalized_hero_id = None
+            hero_name = None
+            if hero_id:
+                normalized_hero_id = hero_id.casefold().replace(" ", "_")
+                hero_name = hero_names.get(hero_id.casefold())
             associations[path.casefold()] = SoundAssociation(
-                hero_id=(
-                    hero_id.casefold().replace(" ", "_") if hero_id else None
-                ),
-                hero_name=hero_names.get(hero_id.casefold()) if hero_id else None,
+                hero_id=normalized_hero_id,
+                hero_name=hero_name,
                 ability_name=ability,
                 sound_event=event,
             )

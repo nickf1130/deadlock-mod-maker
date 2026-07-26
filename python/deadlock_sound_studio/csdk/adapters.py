@@ -42,7 +42,9 @@ def compile_resource(
     expected = expected_compiled_output(
         csdk_root, addon_name, compiled_target
     )
-    before_mtime = expected.stat().st_mtime_ns if expected.exists() else None
+    before_mtime = None
+    if expected.exists():
+        before_mtime = expected.stat().st_mtime_ns
     started_ns = time.time_ns()
     record = run_process(
         executable,
@@ -72,9 +74,8 @@ def synchronize_csdk_workspace(
     project_id: str,
     addon_name: str,
     generated_content: Path,
-    backup_root: Path,
 ) -> tuple[Path, Path]:
-    """Mirror generated sources only into an addon owned by this project."""
+    """Replace generated sources only inside an addon owned by this project."""
     if not csdk_root:
         raise capability_error("CSDK root is missing.")
     content = csdk_root / "content/citadel_addons" / addon_name
@@ -82,19 +83,30 @@ def synchronize_csdk_workspace(
     marker_name = ".deadlock-sound-studio.json"
     for workspace in (content, game):
         marker = workspace / marker_name
-        if workspace.exists():
-            if not marker.is_file():
-                raise StudioError(
-                    "CSDK_WORKSPACE_CONFLICT",
-                    f"Refusing to modify an unowned CSDK addon: {workspace}",
-                )
-            owner = json.loads(marker.read_text(encoding="utf-8"))
-            if owner.get("projectId") != project_id:
-                raise StudioError(
-                    "CSDK_WORKSPACE_CONFLICT",
-                    f"CSDK addon belongs to another project: {workspace}",
-                )
+        if not workspace.exists():
+            continue
+        if not marker.is_file():
+            raise StudioError(
+                "CSDK_WORKSPACE_CONFLICT",
+                f"Refusing to modify an unowned CSDK addon: {workspace}",
+            )
+        owner = json.loads(marker.read_text(encoding="utf-8"))
+        if owner.get("projectId") != project_id:
+            raise StudioError(
+                "CSDK_WORKSPACE_CONFLICT",
+                f"CSDK addon belongs to another project: {workspace}",
+            )
+
+    for workspace in (content, game):
+        marker = workspace / marker_name
         workspace.mkdir(parents=True, exist_ok=True)
+        for generated_item in workspace.iterdir():
+            if generated_item.name == marker_name:
+                continue
+            if generated_item.is_dir():
+                shutil.rmtree(generated_item)
+            else:
+                generated_item.unlink()
         marker.write_text(
             json.dumps(
                 {"projectId": project_id, "addonName": addon_name}, indent=2
@@ -107,10 +119,6 @@ def synchronize_csdk_workspace(
             continue
         relative = source.relative_to(generated_content)
         destination = content / relative
-        if destination.exists():
-            backup = backup_root / "csdk-content" / relative
-            backup.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(destination, backup)
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, destination)
     return content, game

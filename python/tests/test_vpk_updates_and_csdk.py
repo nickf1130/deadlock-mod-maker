@@ -104,16 +104,21 @@ def test_csdk_workspace_sync_only_touches_owned_addon(tmp_path: Path):
     generated_sound.parent.mkdir(parents=True)
     generated_sound.write_bytes(b"wav")
     content, game = synchronize_csdk_workspace(
-        csdk, "project-one", "dss_example", generated, tmp_path / "backup"
+        csdk, "project-one", "dss_example", generated
     )
     assert (content / "sounds/ui/accept.wav").read_bytes() == b"wav"
     assert (content / ".deadlock-sound-studio.json").is_file()
     assert (game / ".deadlock-sound-studio.json").is_file()
+    stale = game / "sounds/ui/stale.vsnd_c"
+    stale.parent.mkdir(parents=True)
+    stale.write_bytes(b"stale")
+    synchronize_csdk_workspace(csdk, "project-one", "dss_example", generated)
+    assert not stale.exists()
     foreign = csdk / "content/citadel_addons/foreign"
     foreign.mkdir()
     with pytest.raises(Exception):
         synchronize_csdk_workspace(
-            csdk, "project-one", "foreign", generated, tmp_path / "backup"
+            csdk, "project-one", "foreign", generated
         )
 
 

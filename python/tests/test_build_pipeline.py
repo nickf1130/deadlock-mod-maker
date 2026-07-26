@@ -121,6 +121,8 @@ def test_build_packages_every_replacement_in_one_validated_vpk(
     monkeypatch.setattr(build_module, "process_audio", fake_process_audio)
     monkeypatch.setattr(build_module, "compile_resource", fake_compile)
     monkeypatch.setattr(build_module, "package_vpk", fake_package)
+    paths.cache.mkdir(parents=True)
+    (paths.cache / "preview.wav").write_bytes(b"temporary preview")
 
     result = BuildJob(
         paths, projects, diagnostics, lambda _event: None
@@ -131,3 +133,16 @@ def test_build_packages_every_replacement_in_one_validated_vpk(
     assert [entry.path for entry in list_vpk(Path(result.vpk_path))] == sorted(
         expected_paths
     )
+    assert result.export_directory
+    export_directory = Path(result.export_directory)
+    assert {path.name for path in export_directory.iterdir()} == {
+        f"{project.name}.vpk",
+        "README.txt",
+    }
+    project_root = paths.project(project.id)
+    assert {path.name for path in project_root.iterdir()} == {
+        "project.json",
+        "source-files",
+    }
+    assert not paths.cache.exists()
+    assert result.item_log_path is None

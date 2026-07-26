@@ -41,15 +41,13 @@ def build_ffmpeg_arguments(
         )
     if settings.fade_in_seconds > 0:
         filters.append(f"afade=t=in:st=0:d={settings.fade_in_seconds:.6f}")
-    effective_duration = (
-        settings.trim_end_seconds - settings.trim_start_seconds
-        if settings.trim_end_seconds is not None
-        else (
-            source_duration_seconds - settings.trim_start_seconds
-            if source_duration_seconds
-            else None
+    effective_duration = None
+    if settings.trim_end_seconds is not None:
+        effective_duration = (
+            settings.trim_end_seconds - settings.trim_start_seconds
         )
-    )
+    elif source_duration_seconds:
+        effective_duration = source_duration_seconds - settings.trim_start_seconds
     if settings.fade_out_seconds > 0:
         if effective_duration is None:
             raise validation_error("Fade-out requires a known duration or trim end")
@@ -105,15 +103,19 @@ def inspect_audio(path: Path, ffprobe: Path | None = None) -> AudioMetadata:
             duration = stream.get("duration") or payload.get("format", {}).get(
                 "duration"
             )
-            sample_rate = (
-                int(stream["sample_rate"]) if stream.get("sample_rate") else None
-            )
+            sample_rate = None
+            if stream.get("sample_rate"):
+                sample_rate = int(stream["sample_rate"])
+            duration_ms = None
+            if duration:
+                duration_ms = round(float(duration) * 1000)
+            channels = None
+            if stream.get("channels"):
+                channels = int(stream["channels"])
             return AudioMetadata(
-                duration_ms=round(float(duration) * 1000) if duration else None,
+                duration_ms=duration_ms,
                 sample_rate=sample_rate,
-                channels=(
-                    int(stream["channels"]) if stream.get("channels") else None
-                ),
+                channels=channels,
                 codec=stream.get("codec_name"),
                 preview_path=str(source),
                 warnings=_audio_warnings(sample_rate),
@@ -154,15 +156,14 @@ def process_audio(
         raise capability_error("FFprobe is required to validate processed audio.")
     source_metadata = inspect_audio(source, ffprobe)
     output.parent.mkdir(parents=True, exist_ok=True)
+    source_duration_seconds = None
+    if source_metadata.duration_ms:
+        source_duration_seconds = source_metadata.duration_ms / 1000
     arguments = build_ffmpeg_arguments(
         source,
         output,
         settings,
-        source_duration_seconds=(
-            source_metadata.duration_ms / 1000
-            if source_metadata.duration_ms
-            else None
-        ),
+        source_duration_seconds=source_duration_seconds,
     )
     record = run_process(
         ffmpeg,
@@ -188,8 +189,11 @@ def _fallback_inspect(path: Path) -> AudioMetadata:
             with wave.open(str(path), "rb") as audio:
                 frames = audio.getnframes()
                 rate = audio.getframerate()
+                duration_ms = None
+                if rate:
+                    duration_ms = round(frames / rate * 1000)
                 return AudioMetadata(
-                    duration_ms=round(frames / rate * 1000) if rate else None,
+                    duration_ms=duration_ms,
                     sample_rate=rate,
                     channels=audio.getnchannels(),
                     codec=f"pcm_s{audio.getsampwidth() * 8}le",

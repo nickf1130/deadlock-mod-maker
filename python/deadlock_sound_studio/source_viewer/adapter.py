@@ -96,11 +96,9 @@ def export_visual_preview(
     cache_root = (
         paths.cache / "original-visuals" / asset.archive_fingerprint / asset.id
     )
-    extensions = (
-        {".png", ".tga", ".jpg", ".jpeg"}
-        if asset.kind == VisualResourceKind.TEXTURE
-        else {".vmat", ".txt"}
-    )
+    extensions = {".vmat", ".txt"}
+    if asset.kind == VisualResourceKind.TEXTURE:
+        extensions = {".png", ".tga", ".jpg", ".jpeg"}
     existing = next(
         (
             path
@@ -114,9 +112,9 @@ def export_visual_preview(
     if cache_root.exists():
         shutil.rmtree(cache_root)
     cache_root.mkdir(parents=True)
-    resource_extension = (
-        "vtex_c" if asset.kind == VisualResourceKind.TEXTURE else "vmat_c"
-    )
+    resource_extension = "vmat_c"
+    if asset.kind == VisualResourceKind.TEXTURE:
+        resource_extension = "vtex_c"
     run_process(
         executable,
         [

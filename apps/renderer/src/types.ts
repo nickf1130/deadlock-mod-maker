@@ -328,7 +328,6 @@ export type PackageCombineResult = {
     winnerPackage: string;
   }>;
   sizeBytes: number;
-  sha256: string;
 };
 
 export type ProcessRecord = {
@@ -363,8 +362,6 @@ export type BuildResult = {
   conflicts: Array<{ kind: string; itemIds: string[]; targetPath: string; message: string }>;
   vpkPath: string | null;
   exportDirectory: string | null;
-  checksum: string | null;
-  reportPath: string | null;
   itemLogPath: string | null;
   guidedFallbackDirectory: string | null;
   warnings: string[];

@@ -31,29 +31,28 @@ DeadlockModMaker/
 │   └── backend/
 │       └── deadlock-sound-worker/
 │           └── deadlock-sound-worker.exe
-├── tools/
-│   ├── CSDK12/                    # optional; an external override is supported
+├── tools/                         # created only by automatic tool downloads
 │   ├── Source2Viewer/
 │   │   ├── Source2Viewer.exe
 │   │   └── Source2Viewer-CLI.exe
 │   └── ffmpeg/
 │       ├── ffmpeg.exe
 │       └── ffprobe.exe
-├── data/
-├── cache/
-├── projects/
-├── exports/
-├── logs/
-└── backups/
+├── data/                          # settings, catalog database, Electron profile
+├── cache/                         # created for previews; cleared after export
+├── projects/                      # project.json, selected sources, failure reports
+├── exports/                       # final VPK, README, and optional sharing copies
+├── logs/                          # created only after an unexpected application error
+└── backups/                       # previous manifests and deleted-project recovery
 ```
 
-Common alternative CSDK names such as `Reduced_CSDK_12` and `Reduced CSDK 12` are detected under `tools/` and the current user’s Desktop. Manual paths always take precedence.
+Common alternative CSDK names such as `Reduced_CSDK_12` and `Reduced CSDK 12` are detected only inside the app's portable `tools/` folder. A folder selected in diagnostics always takes precedence; the app does not assume the user's Desktop or another personal folder.
 
-The automatic installer reads the publishers' current GitHub release metadata, downloads only missing assets, checks SHA-256 release digests when supplied, rejects unsafe ZIP paths, installs through temporary directories, and reruns diagnostics before reporting success.
+Only `data/` is created during a normal first launch. The other folders are created lazily by the feature that needs them. The automatic installer reads the publishers' current GitHub release metadata, downloads only missing assets, checks SHA-256 release digests when supplied, rejects unsafe ZIP paths, installs through temporary directories, and reruns diagnostics before reporting success.
 
 ## PAK/VPK combiner
 
-The PAK Combiner page accepts up to 50 `.vpk` or Valve-format `.pak` files. It lists internal paths and stored sizes before writing anything. Package order is significant: when multiple inputs contain the same case-insensitive internal path, the lower input wins. The output is a verified single-file VPK with a SHA-256 checksum.
+The PAK Combiner page accepts up to 50 `.vpk` or Valve-format `.pak` files. It lists internal paths and stored sizes before writing anything. Package order is significant: when multiple inputs contain the same case-insensitive internal path, the lower input wins. The output is independently reopened and verified after it is written.
 
 ## Development setup
 
@@ -78,7 +77,7 @@ Set-Location python
 python -m deadlock_sound_studio
 ```
 
-The worker then accepts one JSON-RPC request per standard-input line and writes only protocol JSON to standard output. Logs go to standard error and `logs/python-worker.log`.
+The worker then accepts one JSON-RPC request per standard-input line and writes only protocol JSON to standard output. Routine messages go to standard error. `logs/python-worker.log` is created only if the backend hits an unexpected error.
 
 ## Release build
 

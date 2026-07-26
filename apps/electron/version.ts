@@ -13,7 +13,9 @@ export function compareVersions(left: string, right: string): number {
   const length = Math.max(a.length, b.length);
   for (let index = 0; index < length; index += 1) {
     const difference = (a[index] ?? 0) - (b[index] ?? 0);
-    if (difference !== 0) return Math.sign(difference);
+    if (difference !== 0) {
+      return Math.sign(difference);
+    }
   }
   return 0;
 }

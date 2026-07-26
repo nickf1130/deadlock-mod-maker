@@ -90,26 +90,35 @@ export async function checkForUpdates(): Promise<UpdateInfo> {
     throw new Error(`GitHub release check failed with HTTP ${response.status}.`);
   }
   const release = (await response.json()) as GitHubRelease;
-  const latestVersion =
-    typeof release.tag_name === "string"
-      ? release.tag_name.replace(/^v/i, "")
-      : null;
-  if (!latestVersion) throw new Error("The latest GitHub release has no valid version tag.");
+  let latestVersion: string | null = null;
+  if (typeof release.tag_name === "string") {
+    latestVersion = release.tag_name.replace(/^v/i, "");
+  }
+  if (!latestVersion) {
+    throw new Error("The latest GitHub release has no valid version tag.");
+  }
   const expectedAssetName = expectedPortableAssetName(latestVersion);
-  const assets = Array.isArray(release.assets)
-    ? (release.assets as GitHubAsset[])
-    : [];
+  let assets: GitHubAsset[] = [];
+  if (Array.isArray(release.assets)) {
+    assets = release.assets as GitHubAsset[];
+  }
   const asset = assets.find(
     (candidate) =>
       typeof candidate.name === "string" &&
       candidate.name.toLowerCase() === expectedAssetName.toLowerCase()
   );
-  const assetName = typeof asset?.name === "string" ? asset.name : null;
-  const assetUrl =
-    typeof asset?.browser_download_url === "string"
-      ? asset.browser_download_url
-      : null;
-  const assetSize = isSafeUpdateSize(asset?.size) ? asset.size : null;
+  let assetName: string | null = null;
+  if (typeof asset?.name === "string") {
+    assetName = asset.name;
+  }
+  let assetUrl: string | null = null;
+  if (typeof asset?.browser_download_url === "string") {
+    assetUrl = asset.browser_download_url;
+  }
+  let assetSize: number | null = null;
+  if (isSafeUpdateSize(asset?.size)) {
+    assetSize = asset.size;
+  }
   const assetDigest = normalizeSha256Digest(asset?.digest);
   const trustedAsset = Boolean(
     assetName &&
@@ -120,17 +129,34 @@ export async function checkForUpdates(): Promise<UpdateInfo> {
   );
   const portableExecutable = process.env.PORTABLE_EXECUTABLE_FILE;
   const available = compareVersions(latestVersion, currentVersion) > 0;
+  let releaseName = `Version ${latestVersion}`;
+  if (typeof release.name === "string") {
+    releaseName = release.name;
+  }
+  let releaseNotes = "";
+  if (typeof release.body === "string") {
+    releaseNotes = release.body.slice(0, 40_000);
+  }
+  let publishedAt: string | null = null;
+  if (typeof release.published_at === "string") {
+    publishedAt = release.published_at;
+  }
+  let releaseUrl = RELEASES_URL;
+  if (typeof release.html_url === "string") {
+    releaseUrl = release.html_url;
+  }
+  let status: UpdateInfo["status"] = "current";
+  if (available) {
+    status = "available";
+  }
   return {
     currentVersion,
     latestVersion,
     available,
-    releaseName:
-      typeof release.name === "string" ? release.name : `Version ${latestVersion}`,
-    releaseNotes: typeof release.body === "string" ? release.body.slice(0, 40_000) : "",
-    publishedAt:
-      typeof release.published_at === "string" ? release.published_at : null,
-    releaseUrl:
-      typeof release.html_url === "string" ? release.html_url : RELEASES_URL,
+    releaseName,
+    releaseNotes,
+    publishedAt,
+    releaseUrl,
     assetName,
     assetUrl,
     assetSize,
@@ -142,7 +168,7 @@ export async function checkForUpdates(): Promise<UpdateInfo> {
         path.isAbsolute(portableExecutable) &&
         existsSync(portableExecutable)
     ),
-    status: available ? "available" : "current"
+    status
   };
 }
 
@@ -194,7 +220,9 @@ export async function downloadAndApplyUpdate(
   mkdirSync(updateRoot, { recursive: true });
   const partial = path.join(updateRoot, `${update.assetName}.${process.pid}.download`);
   const finalPath = path.join(destinationDirectory, path.basename(update.assetName));
-  if (existsSync(partial)) rmSync(partial, { force: true });
+  if (existsSync(partial)) {
+    rmSync(partial, { force: true });
+  }
 
   progress({
     event: "update.progress",
@@ -228,12 +256,16 @@ export async function downloadAndApplyUpdate(
   try {
     while (true) {
       const { done, value } = await reader.read();
-      if (done) break;
+      if (done) {
+        break;
+      }
       const chunk = Buffer.from(value);
       hasher.update(chunk);
       downloadedBytes += chunk.length;
       assertDownloadWithinBounds(downloadedBytes, update.assetSize);
-      if (!writer.write(chunk)) await once(writer, "drain");
+      if (!writer.write(chunk)) {
+        await once(writer, "drain");
+      }
       progress({
         event: "update.progress",
         stage: "downloading",
@@ -247,7 +279,9 @@ export async function downloadAndApplyUpdate(
     await finished;
   } catch (error) {
     writer.destroy();
-    if (existsSync(partial)) rmSync(partial, { force: true });
+    if (existsSync(partial)) {
+      rmSync(partial, { force: true });
+    }
     throw error;
   }
   if (!existsSync(partial)) {
@@ -287,15 +321,23 @@ try {
   Start-Process -FilePath $newPath
   if ($oldPath -ne $newPath) {
     for ($attempt = 0; $attempt -lt 60; $attempt++) {
-      if (-not (Test-Path -LiteralPath $oldPath)) { break }
-      try { Remove-Item -LiteralPath $oldPath -Force -ErrorAction Stop; break }
-      catch { Start-Sleep -Seconds 1 }
+      if (-not (Test-Path -LiteralPath $oldPath)) {
+        break
+      }
+      try {
+        Remove-Item -LiteralPath $oldPath -Force -ErrorAction Stop
+        break
+      } catch {
+        Start-Sleep -Seconds 1
+      }
     }
   }
   Add-Content -LiteralPath $logPath -Value ("Update applied at " + (Get-Date).ToString("o"))
 } catch {
   Add-Content -LiteralPath $logPath -Value ("Update failed: " + $_.Exception.Message)
-  if (Test-Path -LiteralPath $newPath) { Start-Process -FilePath $newPath }
+  if (Test-Path -LiteralPath $newPath) {
+    Start-Process -FilePath $newPath
+  }
 }
 `;
   const encoded = Buffer.from(command, "utf16le").toString("base64");

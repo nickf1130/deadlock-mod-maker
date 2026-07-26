@@ -51,7 +51,6 @@ def test_inspect_and_combine_packages_with_lower_input_winning(tmp_path: Path):
             "winnerPackage": "second.pak",
         }
     ]
-    assert len(result["sha256"]) == 64
     combined_entries = {entry.path: entry for entry in list_vpk(output)}
     assert set(combined_entries) == {
         "materials/only_second.vmat_c",

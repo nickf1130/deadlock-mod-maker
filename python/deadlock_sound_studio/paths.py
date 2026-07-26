@@ -24,7 +24,9 @@ class AppPaths:
     @classmethod
     def resolve(cls) -> AppPaths:
         explicit = os.environ.get("DSS_APP_ROOT")
-        root = Path(explicit) if explicit else Path(sys.executable).resolve().parent
+        root = Path(sys.executable).resolve().parent
+        if explicit:
+            root = Path(explicit)
         return cls.from_root(root)
 
     @classmethod
@@ -41,16 +43,10 @@ class AppPaths:
             logs=resolved / "logs",
             backups=resolved / "backups",
         )
-        for directory in (
-            instance.tools,
-            instance.data,
-            instance.cache,
-            instance.projects,
-            instance.exports,
-            instance.logs,
-            instance.backups,
-        ):
-            directory.mkdir(parents=True, exist_ok=True)
+        # The settings and database are required as soon as the app starts.
+        # Every other folder is created by the feature that actually uses it.
+        # This keeps a fresh portable install from filling up with empty folders.
+        instance.data.mkdir(parents=True, exist_ok=True)
         return instance
 
     @property

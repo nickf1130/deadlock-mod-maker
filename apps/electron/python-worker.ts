@@ -91,6 +91,21 @@ export const BACKEND_ALLOWLIST = new Set<BackendMethod>([
   "packages.combine"
 ]);
 
+const LONG_RUNNING_METHODS = new Set<BackendMethod>([
+  "build.start",
+  "sounds.index",
+  "app.bootstrap",
+  "requirements.install",
+  "packages.combine"
+]);
+
+function requestTimeout(method: BackendMethod): number {
+  if (LONG_RUNNING_METHODS.has(method)) {
+    return 30 * 60_000;
+  }
+  return 60_000;
+}
+
 type PendingRequest = {
   resolve: (value: unknown) => void;
   reject: (reason: Error) => void;
@@ -119,7 +134,9 @@ export class PythonWorker {
   ) {}
 
   start(): void {
-    if (this.child) return;
+    if (this.child) {
+      return;
+    }
     const command = this.resolveCommand();
     log.info("Starting Python worker", command.executable, command.args);
     const child = spawn(command.executable, command.args, {
@@ -139,7 +156,9 @@ export class PythonWorker {
     lines.on("line", (line) => this.handleLine(line));
     child.stderr.on("data", (chunk: Buffer) => {
       const value = chunk.toString("utf8").trimEnd();
-      if (value) log.info(`[python] ${value}`);
+      if (value) {
+        log.info(`[python] ${value}`);
+      }
     });
     child.once("error", (error) => this.handleExit(error));
     child.once("exit", (code, signal) => {
@@ -151,20 +170,15 @@ export class PythonWorker {
     if (!BACKEND_ALLOWLIST.has(method)) {
       throw new Error(`Backend method is not permitted: ${method}`);
     }
-    if (!this.child) this.start();
+    if (!this.child) {
+      this.start();
+    }
     const child = this.child;
     if (!child || child.killed || !child.stdin.writable) {
       throw new Error("Python worker is not available");
     }
     const id = randomUUID();
-    const timeoutMs =
-      method === "build.start" ||
-      method === "sounds.index" ||
-      method === "app.bootstrap" ||
-      method === "requirements.install" ||
-      method === "packages.combine"
-        ? 30 * 60_000
-        : 60_000;
+    const timeoutMs = requestTimeout(method);
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         this.pending.delete(id);
@@ -193,8 +207,15 @@ export class PythonWorker {
   private resolveCommand(): { executable: string; args: string[]; cwd: string } {
     if (!app.isPackaged) {
       const pythonRoot = path.join(this.sourceRoot, "python");
+      let executable = process.env.DSS_PYTHON;
+      if (!executable) {
+        executable = "python3";
+        if (process.platform === "win32") {
+          executable = "python";
+        }
+      }
       return {
-        executable: process.env.DSS_PYTHON ?? (process.platform === "win32" ? "python" : "python3"),
+        executable,
         args: ["-m", "deadlock_sound_studio"],
         cwd: pythonRoot
       };
@@ -219,9 +240,13 @@ export class PythonWorker {
       this.onEvent(message);
       return;
     }
-    if (!message.id) return;
+    if (!message.id) {
+      return;
+    }
     const pending = this.pending.get(message.id);
-    if (!pending) return;
+    if (!pending) {
+      return;
+    }
     clearTimeout(pending.timeout);
     this.pending.delete(message.id);
     if (message.ok) {
@@ -234,7 +259,9 @@ export class PythonWorker {
   }
 
   private handleExit(error: Error): void {
-    if (!this.child) return;
+    if (!this.child) {
+      return;
+    }
     this.child = null;
     this.rejectPending(error);
     log.error(error.message);

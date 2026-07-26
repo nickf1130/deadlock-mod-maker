@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import hashlib
 import json
+import logging
 import shutil
 import zipfile
 from collections import defaultdict
@@ -24,25 +24,20 @@ from ..models import (
     ItemBuildResult,
     ItemStatus,
     ProcessRecord,
-    ProjectManifest,
     VisualReplacementItem,
     VisualResourceKind,
     utc_now,
 )
 from ..paths import AppPaths, normalize_internal_path, source_path_for_compiled
-from ..projects import ProjectService, detect_conflicts
+from ..projects import (
+    ProjectService,
+    clear_project_build_artifacts,
+    detect_conflicts,
+)
 from ..visuals import write_vtex_descriptor
 from ..vpk import list_vpk
 
 ProgressCallback = Callable[[dict[str, object]], None]
-
-
-def sha256_file(path: Path) -> str:
-    hasher = hashlib.sha256()
-    with path.open("rb") as stream:
-        while block := stream.read(1024 * 1024):
-            hasher.update(block)
-    return hasher.hexdigest()
 
 
 def create_zip(
@@ -60,8 +55,6 @@ def create_zip(
     with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         for filename in (
             vpk.name,
-            "checksums.txt",
-            "build-report.json",
             "README.txt",
         ):
             path = export_directory / filename
@@ -83,27 +76,27 @@ def create_compatibility_copy(
         raise StudioError("EXPORT_NOT_FOUND", "The requested export does not exist.")
     compatibility = export_directory / "pak01_dir.vpk"
     shutil.copy2(canonical, compatibility)
-    checksum = sha256_file(compatibility)
-    checksums = export_directory / "checksums.txt"
-    lines: list[str] = []
-    if checksums.is_file():
-        lines = [
-            line
-            for line in checksums.read_text(encoding="utf-8").splitlines()
-            if not line.endswith("  pak01_dir.vpk")
-        ]
-    lines.append(f"{checksum}  pak01_dir.vpk")
-    checksums.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return str(compatibility)
 
 
 def latest_compiled(
     project_root: Path, target_path: str, current_version: str
 ) -> Path | None:
-    compiled_root = project_root / "compiled-game"
-    if not compiled_root.is_dir():
+    build_cache = project_root / ".build-cache"
+    if build_cache.is_dir():
+        for version_root in sorted(build_cache.glob("build-*"), reverse=True):
+            if version_root.name == current_version:
+                continue
+            candidate = version_root / "staging" / Path(target_path)
+            if candidate.is_file() and candidate.stat().st_size > 0:
+                return candidate
+
+    # Projects built by releases before 1.0 stored the same compiled file in a
+    # second tree. Read that old layout for one retry, but never write it again.
+    legacy_compiled_root = project_root / "compiled-game"
+    if not legacy_compiled_root.is_dir():
         return None
-    for version_root in sorted(compiled_root.glob("build-*"), reverse=True):
+    for version_root in sorted(legacy_compiled_root.glob("build-*"), reverse=True):
         if version_root.name == current_version:
             continue
         candidate = version_root / Path(target_path)
@@ -112,12 +105,12 @@ def latest_compiled(
     return None
 
 
-def write_item_logs(
+def write_failure_report(
     project_root: Path,
     version: str,
     item_results: list[ItemBuildResult],
 ) -> Path:
-    output = project_root / "logs" / f"{version}-items.json"
+    output = project_root / "failures" / f"{version}-items.json"
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(
         json.dumps(
@@ -195,32 +188,35 @@ class BuildJob:
                 stage="capability",
                 message="FFmpeg and FFprobe are required for enabled sound replacements.",
             )
-        ffmpeg = Path(resolved.ffmpeg) if resolved.ffmpeg else None
-        ffprobe = Path(resolved.ffprobe) if resolved.ffprobe else None
-        csdk_root = Path(resolved.csdk_root) if resolved.csdk_root else None
-        compiler = (
-            Path(resolved.resource_compiler)
-            if resolved.resource_compiler
-            else None
-        )
-        packager = (
-            Path(resolved.vpk_packager) if resolved.vpk_packager else None
-        )
+        ffmpeg = None
+        if resolved.ffmpeg:
+            ffmpeg = Path(resolved.ffmpeg)
+        ffprobe = None
+        if resolved.ffprobe:
+            ffprobe = Path(resolved.ffprobe)
+        csdk_root = None
+        if resolved.csdk_root:
+            csdk_root = Path(resolved.csdk_root)
+        compiler = None
+        if resolved.resource_compiler:
+            compiler = Path(resolved.resource_compiler)
+        packager = None
+        if resolved.vpk_packager:
+            packager = Path(resolved.vpk_packager)
         root = self.paths.project(project_id)
-        processed_root = root / "processed-audio"
-        generated_root = root / "generated-content" / version
-        compiled_root = root / "compiled-game" / version
-        staging = root / "staging" / version / manifest.name
-        build_output = root / "build-output" / version
-        backup_root = self.paths.backups / project_id / version
-        for directory in (generated_root, compiled_root, staging, build_output, backup_root):
+        build_cache = root / ".build-cache" / version
+        processed_root = build_cache / "processed-audio"
+        generated_root = build_cache / "generated-content"
+        staging = build_cache / "staging"
+        export_directory = self.paths.exports / manifest.name / version
+        export_vpk = export_directory / f"{manifest.name}.vpk"
+        for directory in (generated_root, staging):
             directory.mkdir(parents=True, exist_ok=True)
         addon_name = f"dss_{manifest.name[:40]}_{manifest.id[:8].replace('-', '')}"
         item_results: list[ItemBuildResult] = []
         item_process_records: dict[str, list[ProcessRecord]] = defaultdict(list)
         generated_sources: dict[str, Path] = {}
         loop_groups: dict[Path, list[EncodingEntry]] = defaultdict(list)
-        process_records: list[dict] = []
         if retry_failed_only:
             work_ids = {item.id for item in work_items}
             for item in enabled:
@@ -232,11 +228,8 @@ class BuildJob:
                     work_items.append(item)
                     work_ids.add(item.id)
                     continue
-                compiled_copy = compiled_root / Path(normalized_target)
                 staged_copy = staging / Path(normalized_target)
-                compiled_copy.parent.mkdir(parents=True, exist_ok=True)
                 staged_copy.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(prior_compiled, compiled_copy)
                 shutil.copy2(prior_compiled, staged_copy)
                 item.status = ItemStatus.READY_FOR_PACKAGING
                 item.last_error = None
@@ -247,7 +240,7 @@ class BuildJob:
                         status=ItemStatus.READY_FOR_PACKAGING,
                         source_relative_path=item.source_relative_path,
                         compiled_relative_path=str(
-                            compiled_copy.relative_to(root)
+                            staged_copy.relative_to(root)
                         ).replace("\\", "/"),
                         reused_compiled_output=True,
                     )
@@ -300,10 +293,6 @@ class BuildJob:
                     continue
                 self._progress(job_id, "processAudio", index - 1, total, item.target.internal_path)
                 processed = processed_root / f"{item.id}.wav"
-                if processed.exists():
-                    backup = backup_root / "processed-audio" / processed.name
-                    backup.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(processed, backup)
                 item.status = ItemStatus.PROCESSING_AUDIO
                 metadata = process_audio(
                     source,
@@ -314,13 +303,12 @@ class BuildJob:
                     cancellation=cancellation,
                     record_sink=item_process_records[item.id],
                 )
-                process_records.extend(
-                    record.model_dump(by_alias=True)
-                    for record in item_process_records[item.id]
-                )
+                duration_seconds = None
+                if metadata.duration_ms:
+                    duration_seconds = metadata.duration_ms / 1000
                 validate_loop(
                     item.looping,
-                    metadata.duration_ms / 1000 if metadata.duration_ms else None,
+                    duration_seconds,
                 )
                 item.processed_relative_path = str(processed.relative_to(root)).replace("\\", "/")
                 source_internal = source_path_for_compiled(item.target.compiled_path)
@@ -336,10 +324,6 @@ class BuildJob:
                 current_item_id = None
             for directory, entries in loop_groups.items():
                 encoding = directory / "encoding.txt"
-                if encoding.exists():
-                    backup = backup_root / "encoding" / encoding.relative_to(generated_root)
-                    backup.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(encoding, backup)
                 encoding.write_text(generate_encoding(entries), encoding="utf-8", newline="\n")
             self._progress(job_id, "synchronize", 0, total, None)
             content_root, _ = synchronize_csdk_workspace(
@@ -347,7 +331,6 @@ class BuildJob:
                 project_id,
                 addon_name,
                 generated_root,
-                backup_root,
             )
             for index, item in enumerate(work_items, start=1):
                 current_item_id = item.id
@@ -364,14 +347,10 @@ class BuildJob:
                     item.target.compiled_path,
                     cancellation=cancellation,
                 )
-                process_records.append(record.model_dump(by_alias=True))
                 item_process_records[item.id].append(record)
                 normalized_target = normalize_internal_path(item.target.compiled_path)
-                compiled_copy = compiled_root / Path(normalized_target)
                 staged_copy = staging / Path(normalized_target)
-                compiled_copy.parent.mkdir(parents=True, exist_ok=True)
                 staged_copy.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(compiled, compiled_copy)
                 shutil.copy2(compiled, staged_copy)
                 if staged_copy.stat().st_size == 0:
                     raise StudioError(
@@ -384,21 +363,21 @@ class BuildJob:
                         target_path=normalized_target,
                         status=ItemStatus.READY_FOR_PACKAGING,
                         source_relative_path=item.source_relative_path,
-                        compiled_relative_path=str(compiled_copy.relative_to(root)).replace("\\", "/"),
+                        compiled_relative_path=str(
+                            staged_copy.relative_to(root)
+                        ).replace("\\", "/"),
                         process_records=item_process_records[item.id],
                     )
                 )
                 current_item_id = None
             self._progress(job_id, "package", total, total, None)
-            vpk_output = build_output / f"{manifest.name}.vpk"
-            package_record = package_vpk(
+            package_vpk(
                 packager,
                 staging,
-                vpk_output,
+                export_vpk,
                 cancellation=cancellation,
             )
-            process_records.append(package_record.model_dump(by_alias=True))
-            entries = list_vpk(vpk_output)
+            entries = list_vpk(export_vpk)
             actual = [entry.path.casefold() for entry in entries]
             expected = [
                 normalize_internal_path(item.target.compiled_path).casefold()
@@ -412,25 +391,6 @@ class BuildJob:
                     "The generated VPK contents do not exactly match the project manifest.",
                     {"missingOrDuplicated": missing, "unexpected": unexpected},
                 )
-            checksum = sha256_file(vpk_output)
-            export_directory = self.paths.exports / manifest.name / version
-            export_directory.mkdir(parents=True, exist_ok=True)
-            export_vpk = export_directory / f"{manifest.name}.vpk"
-            shutil.copy2(vpk_output, export_vpk)
-            report = self._report(
-                manifest,
-                version,
-                started,
-                checksum,
-                export_vpk,
-                expected,
-                process_records,
-            )
-            report_path = export_directory / "build-report.json"
-            report_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
-            (export_directory / "checksums.txt").write_text(
-                f"{checksum}  {export_vpk.name}\n", encoding="utf-8"
-            )
             (export_directory / "README.txt").write_text(
                 "Exported with Deadlock Mod Maker.\n\n"
                 f"Import {export_vpk.name} with Deadlock Mod Manager. -> https://deadlockmods.app/\n"
@@ -439,6 +399,8 @@ class BuildJob:
             )
             for item in enabled:
                 item.status = ItemStatus.PACKAGED
+                if not isinstance(item, VisualReplacementItem):
+                    item.processed_relative_path = None
             for result in item_results:
                 result.status = ItemStatus.PACKAGED
             manifest.build_history.append(
@@ -448,12 +410,23 @@ class BuildJob:
                     finished_at=utc_now(),
                     success=True,
                     output_relative_path=str(export_vpk.relative_to(self.paths.root)).replace("\\", "/"),
-                    checksum=checksum,
                 )
             )
             manifest.updated_at = utc_now()
             self.projects.save(manifest)
-            item_log_path = write_item_logs(root, version, item_results)
+            cleanup_warnings: list[str] = []
+            try:
+                clear_project_build_artifacts(
+                    root,
+                    self.paths.backups / project_id,
+                )
+                if self.paths.cache.is_dir():
+                    shutil.rmtree(self.paths.cache)
+            except OSError as error:
+                logging.exception("Could not clear build caches after export")
+                cleanup_warnings.append(
+                    f"The export succeeded, but temporary files could not be cleared: {error}"
+                )
             self._progress(job_id, "complete", total, total, None)
             return BuildResult(
                 success=True,
@@ -463,16 +436,12 @@ class BuildJob:
                 item_results=item_results,
                 vpk_path=str(export_vpk),
                 export_directory=str(export_directory),
-                checksum=checksum,
-                report_path=str(report_path),
-                item_log_path=str(item_log_path),
+                warnings=cleanup_warnings,
             )
         except StudioError as error:
-            record_payload = (
-                error.details.get("record")
-                if isinstance(error.details, dict)
-                else None
-            )
+            record_payload = None
+            if isinstance(error.details, dict):
+                record_payload = error.details.get("record")
             if record_payload and current_item_id:
                 try:
                     item_process_records[current_item_id].append(
@@ -486,11 +455,12 @@ class BuildJob:
                     item.status = ItemStatus.READY_FOR_PACKAGING
                     continue
                 item.status = ItemStatus.FAILED
-                item.last_error = (
-                    str(error)
-                    if item.id == current_item_id
-                    else "Not completed because the build stopped on another item."
-                )
+                if item.id == current_item_id:
+                    item.last_error = str(error)
+                else:
+                    item.last_error = (
+                        "Not completed because the build stopped on another item."
+                    )
                 item_results.append(
                     ItemBuildResult(
                         item_id=item.id,
@@ -512,7 +482,19 @@ class BuildJob:
             )
             manifest.updated_at = utc_now()
             self.projects.save(manifest)
-            item_log_path = write_item_logs(root, version, item_results)
+            item_log_path = write_failure_report(root, version, item_results)
+            for transient_directory in (processed_root, generated_root):
+                shutil.rmtree(transient_directory, ignore_errors=True)
+            if export_vpk.is_file():
+                export_vpk.unlink()
+            if export_directory.is_dir() and not any(export_directory.iterdir()):
+                export_directory.rmdir()
+            guided_fallback_directory = None
+            if error.code == "CAPABILITY_UNAVAILABLE" and staging.exists():
+                guided_fallback_directory = str(staging)
+            warnings = []
+            if error.details:
+                warnings.append(json.dumps(error.details))
             return BuildResult(
                 success=False,
                 version=version,
@@ -520,12 +502,8 @@ class BuildJob:
                 message=error.message,
                 item_results=item_results,
                 item_log_path=str(item_log_path),
-                guided_fallback_directory=(
-                    str(staging)
-                    if error.code == "CAPABILITY_UNAVAILABLE" and staging.exists()
-                    else None
-                ),
-                warnings=[json.dumps(error.details)] if error.details else [],
+                guided_fallback_directory=guided_fallback_directory,
+                warnings=warnings,
             )
 
     def _progress(
@@ -546,56 +524,3 @@ class BuildJob:
                 "currentItem": current_item,
             }
         )
-
-    def _report(
-        self,
-        manifest: ProjectManifest,
-        version: str,
-        started: str,
-        checksum: str,
-        vpk: Path,
-        paths: list[str],
-        process_records: list[dict],
-    ) -> dict[str, object]:
-        return {
-            "schemaVersion": 1,
-            "projectName": manifest.display_name,
-            "projectVersion": version,
-            "createdAt": utc_now(),
-            "startedAt": started,
-            "gameArchiveFingerprint": manifest.game_fingerprint,
-            "replacementCount": len(paths),
-            "successfulReplacementCount": len(paths),
-            "failedReplacementCount": 0,
-            "internalPathsIncluded": paths,
-            "processingSettings": [
-                {
-                    "target": item.target.compiled_path,
-                    "processing": item.processing.model_dump(by_alias=True),
-                    "looping": item.looping.model_dump(by_alias=True),
-                }
-                for item in manifest.target_assets
-                if item.enabled
-            ],
-            "visualSources": [
-                {
-                    "target": item.target.compiled_path,
-                    "kind": item.target.kind.value,
-                    "source": item.source_filename,
-                    "metadata": item.source_metadata.model_dump(by_alias=True),
-                }
-                for item in manifest.visual_assets
-                if item.enabled
-            ],
-            "vpkFileSize": vpk.stat().st_size,
-            "vpkChecksumSha256": checksum,
-            "validationResults": {"exactManifestMatch": True, "unexpectedFiles": []},
-            "toolRuns": [
-                {
-                    **record,
-                    "executablePath": Path(record["executablePath"]).name,
-                }
-                for record in process_records
-            ],
-            "warnings": [],
-        }

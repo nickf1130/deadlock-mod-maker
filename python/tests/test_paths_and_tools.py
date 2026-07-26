@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import pytest
@@ -13,24 +14,38 @@ from deadlock_sound_studio.paths import (
     normalize_internal_path,
     source_path_for_compiled,
 )
+from deadlock_sound_studio.protocol.worker import ErrorFileHandler
 from deadlock_sound_studio.settings import load_settings, save_settings
 
 
-def test_portable_paths_create_all_roots(tmp_path: Path):
+def test_portable_paths_only_create_required_data_root(tmp_path: Path):
     paths = AppPaths.from_root(tmp_path / "portable")
     assert paths.root == (tmp_path / "portable").resolve()
-    assert all(
-        path.is_dir()
-        for path in (
-            paths.tools,
-            paths.data,
-            paths.cache,
-            paths.projects,
-            paths.exports,
-            paths.logs,
-            paths.backups,
-        )
-    )
+    assert paths.data.is_dir()
+    assert not paths.tools.exists()
+    assert not paths.cache.exists()
+    assert not paths.projects.exists()
+    assert not paths.exports.exists()
+    assert not paths.logs.exists()
+    assert not paths.backups.exists()
+
+
+def test_worker_log_is_created_only_after_an_error(paths: AppPaths):
+    output = paths.logs / "python-worker.log"
+    handler = ErrorFileHandler(output, delay=True)
+    handler.setLevel(logging.ERROR)
+    logger = logging.getLogger("test-error-only-file-log")
+    logger.handlers = [handler]
+    logger.propagate = False
+    logger.setLevel(logging.INFO)
+    try:
+        logger.info("Normal startup message")
+        assert not output.exists()
+        logger.error("Unexpected backend failure")
+        assert "Unexpected backend failure" in output.read_text(encoding="utf-8")
+    finally:
+        handler.close()
+        logger.handlers = []
 
 
 def test_tutorial_completion_is_saved_with_portable_settings(paths: AppPaths):
@@ -70,6 +85,7 @@ def test_vpk_internal_path_normalization_and_source_mapping():
 
 def test_approved_roots_reject_path_traversal(paths: AppPaths, tmp_path: Path):
     inside = paths.cache / "preview.wav"
+    inside.parent.mkdir(parents=True)
     inside.write_bytes(b"audio")
     outside = tmp_path / "private.wav"
     outside.write_bytes(b"private")
@@ -104,6 +120,22 @@ def test_tool_discovery_finds_supplied_csdk_layout(paths: AppPaths, tmp_path: Pa
     assert report.can_compile
     assert report.resolved.resource_compiler is not None
     assert "bin_cs2" in report.resolved.resource_compiler
+
+
+def test_tool_discovery_does_not_assume_the_users_desktop(
+    paths: AppPaths, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    desktop = tmp_path / "Desktop"
+    csdk = desktop / "Reduced_CSDK_12"
+    csdk.mkdir(parents=True)
+    viewer = desktop / "Source2Viewer.exe"
+    viewer.write_bytes(b"fake")
+    monkeypatch.setattr(Path, "home", classmethod(lambda _cls: tmp_path))
+
+    report = run_diagnostics(paths, Settings())
+
+    assert report.resolved.csdk_root is None
+    assert report.resolved.source2_viewer is None
 
 
 def test_gui_source_viewer_does_not_claim_cli_capability(paths: AppPaths, tmp_path: Path):

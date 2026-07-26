@@ -80,7 +80,7 @@ body {
   overflow: hidden;
   background: var(--background);
   color: var(--foreground);
-  font-size: 14px;
+  font-size: 16px;
   text-rendering: optimizeLegibility;
 }
 
@@ -136,6 +136,20 @@ code {
   border-radius: 8px;
   border: 1px solid #ffffff;
   box-shadow: none;
+  overflow: hidden;
+}
+
+.brand-mark img {
+  display: block;
+  width: 21px;
+  height: 21px;
+  object-fit: contain;
+  border-radius: 4px;
+}
+
+.boot-screen .brand-mark img {
+  width: 26px;
+  height: 26px;
 }
 
 .brand strong, .brand span {
@@ -144,7 +158,7 @@ code {
 }
 
 .brand strong {
-  font-size: 13px;
+  font-size: 15px;
   color: var(--foreground);
   font-weight: 650;
   letter-spacing: -0.01em;
@@ -152,7 +166,7 @@ code {
 
 .brand span {
   color: #737373;
-  font-size: 10px;
+  font-size: 12px;
   margin-top: 3px;
   letter-spacing: 0;
 }
@@ -174,7 +188,7 @@ code {
   gap: 10px;
   text-align: left;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 500;
   min-height: 38px;
   transition: transform 120ms ease,
@@ -223,7 +237,7 @@ code {
 }
 
 .setup-card strong {
-  font-size: 10px;
+  font-size: 12px;
   color: #e5e5e5;
   font-weight: 600;
 }
@@ -231,7 +245,7 @@ code {
 .setup-card small {
   color: #737373;
   margin-top: 3px;
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .setup-dot {
@@ -249,7 +263,7 @@ code {
 
 .version {
   color: #525252;
-  font-size: 9px;
+  font-size: 11px;
   text-align: center;
   margin: 12px 0 0;
 }
@@ -279,7 +293,7 @@ code {
 }
 
 .topbar h1 {
-  font-size: 15px;
+  font-size: 17px;
   margin: 0;
   color: #f5f5f5;
   font-weight: 600;
@@ -287,7 +301,7 @@ code {
 }
 
 .topbar p {
-  font-size: 10px;
+  font-size: 12px;
   color: #737373;
   margin: 4px 0 0;
 }
@@ -342,7 +356,7 @@ button {
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 7px 12px;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 550;
   cursor: pointer;
   display: inline-flex;
@@ -430,7 +444,7 @@ button.primary:hover:not(:disabled) {
   display: flex;
   gap: 9px;
   align-items: flex-start;
-  font-size: 11px;
+  font-size: 13px;
   color: #d4d4d4;
   border-color: #404040;
   box-shadow: 0 16px 44px rgba(0, 0, 0, 0.55);
@@ -465,14 +479,14 @@ button.primary:hover:not(:disabled) {
 .eyebrow {
   color: #a3a3a3;
   text-transform: uppercase;
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: 0.14em;
   font-weight: 650;
 }
 
 .build-card h2,
 .diagnostics-header h2 {
-  font-size: 30px;
+  font-size: 32px;
   max-width: 720px;
   line-height: 1.12;
   margin: 12px 0;
@@ -483,7 +497,7 @@ button.primary:hover:not(:disabled) {
 .diagnostics-header p {
   color: var(--muted);
   max-width: 670px;
-  font-size: 13px;
+  font-size: 15px;
   line-height: 1.6;
 }
 
@@ -504,7 +518,7 @@ button.primary:hover:not(:disabled) {
 }
 
 .metric span {
-  font-size: 9px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: #737373;
@@ -512,7 +526,7 @@ button.primary:hover:not(:disabled) {
 }
 
 .metric strong {
-  font-size: 27px;
+  font-size: 29px;
   display: block;
   margin: 13px 0 6px;
   color: #fafafa;
@@ -521,7 +535,7 @@ button.primary:hover:not(:disabled) {
 }
 
 .metric small {
-  font-size: 10px;
+  font-size: 12px;
   color: #737373;
 }
 
@@ -534,13 +548,13 @@ button.primary:hover:not(:disabled) {
 
 .section-heading h3 {
   margin: 3px 0 5px;
-  font-size: 17px;
+  font-size: 19px;
 }
 
 .section-heading p {
   margin: 0;
   color: #737373;
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .browser-layout {
@@ -594,7 +608,7 @@ input, select {
   border: 1px solid var(--border);
   border-radius: 5px;
   padding: 8px 9px;
-  font-size: 11px;
+  font-size: 13px;
   min-width: 0;
 }
 
@@ -611,14 +625,14 @@ input, select {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 10px;
+  font-size: 12px;
   color: #737373;
   border-bottom: 1px solid var(--border-soft);
   border-color: var(--border-soft);
 }
 
 .list-summary button {
-  font-size: 10px;
+  font-size: 12px;
   padding: 5px 7px;
   border: 0;
   color: #a3a3a3;
@@ -632,7 +646,7 @@ input, select {
 .catalog-history summary {
   padding: 7px 13px;
   color: var(--muted);
-  font-size: 9px;
+  font-size: 11px;
   cursor: pointer;
 }
 
@@ -650,7 +664,7 @@ input, select {
   padding: 5px 0;
   color: var(--muted);
   border-top: 1px solid var(--border-soft);
-  font-size: 8px;
+  font-size: 10px;
   border-color: var(--border-soft);
 }
 
@@ -713,7 +727,7 @@ input, select {
 }
 
 .asset-main strong {
-  font-size: 11px;
+  font-size: 13px;
   margin-bottom: 5px;
   color: #e5e5e5;
   font-weight: 550;
@@ -721,7 +735,7 @@ input, select {
 
 .asset-main small, .path {
   color: #737373;
-  font-size: 9px;
+  font-size: 11px;
   white-space: nowrap;
   text-overflow: ellipsis;
   overflow: hidden;
@@ -748,7 +762,7 @@ input, select {
 }
 
 .editor h3 {
-  font-size: 19px;
+  font-size: 21px;
   margin: 6px 0;
 }
 
@@ -776,13 +790,13 @@ input, select {
 
 .metadata span {
   color: #737373;
-  font-size: 8px;
+  font-size: 10px;
   text-transform: uppercase;
   letter-spacing: .07em;
 }
 
 .metadata strong {
-  font-size: 10px;
+  font-size: 12px;
   margin-top: 4px;
   color: #e5e5e5;
   font-weight: 550;
@@ -804,7 +818,7 @@ input, select {
 
 .player-top {
   justify-content: space-between;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
   color: #d4d4d4;
 }
@@ -864,7 +878,7 @@ input, select {
   background: #0a0a0a;
   border: 1px solid var(--border);
   border-radius: 3px;
-  font-size: 7px;
+  font-size: 9px;
   line-height: 1.2;
   pointer-events: none;
   border-color: #404040;
@@ -910,11 +924,11 @@ input, select {
 
 .drop-zone strong {
   color: #e5e5e5;
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .drop-zone span {
-  font-size: 9px;
+  font-size: 11px;
   margin-top: 4px;
 }
 
@@ -932,7 +946,7 @@ input, select {
   justify-content: space-between;
   cursor: pointer;
   list-style: none;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 550;
   min-height: 39px;
   color: #d4d4d4;
@@ -955,7 +969,7 @@ input, select {
 
 .form-grid label {
   color: #a3a3a3;
-  font-size: 9px;
+  font-size: 11px;
   display: grid;
   gap: 5px;
 }
@@ -973,7 +987,7 @@ input[type="checkbox"], input[type="radio"] {
 
 .processing .text-button {
   margin: 0 11px 11px;
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .confirm-panel {
@@ -994,13 +1008,13 @@ input[type="checkbox"], input[type="radio"] {
 }
 
 .confirm-panel strong {
-  font-size: 11px;
+  font-size: 13px;
   color: #f5f5f5;
 }
 
 .confirm-panel span {
   color: #737373;
-  font-size: 9px;
+  font-size: 11px;
   margin-top: 4px;
 }
 
@@ -1036,7 +1050,7 @@ input[type="checkbox"], input[type="radio"] {
 .visual-preview figcaption, .material-preview > strong {
   padding: 9px 11px;
   color: var(--muted);
-  font-size: 9px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: .08em;
   border-top: 1px solid var(--border-soft);
@@ -1046,7 +1060,7 @@ input[type="checkbox"], input[type="radio"] {
   display: grid;
   place-items: center;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .material-preview {
@@ -1066,7 +1080,7 @@ input[type="checkbox"], input[type="radio"] {
   overflow: auto;
   color: #bdbdbd;
   font-family: "Google Sans";
-  font-size: 9px;
+  font-size: 11px;
   line-height: 1.55;
   white-space: pre-wrap;
 }
@@ -1085,12 +1099,12 @@ input[type="checkbox"], input[type="radio"] {
 
 .empty strong {
   color: #a3a3a3;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 550;
 }
 
 .empty span {
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .empty.compact {
@@ -1153,7 +1167,7 @@ input[type="checkbox"], input[type="radio"] {
   color: #f87171;
   align-self: stretch;
   background: transparent;
-  border-color: transparent;
+  border-color: var(--border);
 }
 
 .project-items strong, .project-items small {
@@ -1161,13 +1175,13 @@ input[type="checkbox"], input[type="radio"] {
 }
 
 .project-items strong {
-  font-size: 11px;
+  font-size: 13px;
   color: #e5e5e5;
   font-weight: 550;
 }
 
 .project-items small {
-  font-size: 9px;
+  font-size: 11px;
   color: #737373;
   margin-top: 4px;
 }
@@ -1181,7 +1195,7 @@ input[type="checkbox"], input[type="radio"] {
 }
 
 .package-modes label {
-  font-size: 10px;
+  font-size: 12px;
   display: flex;
   gap: 5px;
   align-items: center;
@@ -1210,7 +1224,7 @@ input[type="checkbox"], input[type="radio"] {
   gap: 7px;
   padding: 13px 7px 7px;
   color: var(--lime);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: .1em;
@@ -1242,7 +1256,7 @@ input[type="checkbox"], input[type="radio"] {
 
 .queue-number {
   color: #6b6b6b;
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .queue-main {
@@ -1254,13 +1268,13 @@ input[type="checkbox"], input[type="radio"] {
 }
 
 .queue-main strong {
-  font-size: 11px;
+  font-size: 13px;
   color: #e5e5e5;
   font-weight: 550;
 }
 
 .queue-main code {
-  font-size: 8px;
+  font-size: 10px;
   color: #737373;
   white-space: nowrap;
   overflow: hidden;
@@ -1269,12 +1283,12 @@ input[type="checkbox"], input[type="radio"] {
 }
 
 .queue-main span {
-  font-size: 9px;
+  font-size: 11px;
   color: var(--muted);
 }
 
 .queue-main em {
-  font-size: 8px;
+  font-size: 10px;
   color: var(--amber);
   font-style: normal;
   margin-top: 3px;
@@ -1297,7 +1311,7 @@ input[type="checkbox"], input[type="radio"] {
   border-top: 1px solid var(--border);
   padding-top: 12px;
   color: #737373;
-  font-size: 10px;
+  font-size: 12px;
   border-color: var(--border);
 }
 
@@ -1338,7 +1352,7 @@ input[type="checkbox"], input[type="radio"] {
   display: flex;
   align-items: center;
   gap: 12px;
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
 }
 
@@ -1359,7 +1373,7 @@ input[type="checkbox"], input[type="radio"] {
 
 .compatibility-row code {
   color: #b3b3b3;
-  font-size: 8px;
+  font-size: 10px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1367,7 +1381,7 @@ input[type="checkbox"], input[type="radio"] {
 
 .compatibility-row span, .compatibility-panel p {
   color: var(--muted);
-  font-size: 9px;
+  font-size: 11px;
   margin: 8px 0 0;
 }
 
@@ -1394,7 +1408,7 @@ input[type="checkbox"], input[type="radio"] {
 .candidate-stack button {
   min-height: 26px;
   padding: 4px 7px;
-  font-size: 8px;
+  font-size: 10px;
 }
 
 .status {
@@ -1427,7 +1441,7 @@ input[type="checkbox"], input[type="radio"] {
 }
 
 .diagnostics-header h2 {
-  font-size: 22px;
+  font-size: 24px;
   margin: 8px 0;
 }
 
@@ -1464,14 +1478,14 @@ input[type="checkbox"], input[type="radio"] {
 .item-log-list summary code {
   overflow: hidden;
   color: var(--text);
-  font-size: 9px;
+  font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .item-log-list summary > span {
   color: var(--muted);
-  font-size: 8px;
+  font-size: 10px;
 }
 
 .process-log {
@@ -1488,7 +1502,7 @@ input[type="checkbox"], input[type="radio"] {
   display: flex;
   justify-content: space-between;
   gap: 10px;
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .process-log > div span {
@@ -1498,7 +1512,7 @@ input[type="checkbox"], input[type="radio"] {
 .process-log > code {
   overflow: auto;
   color: var(--muted);
-  font-size: 8px;
+  font-size: 10px;
   white-space: nowrap;
 }
 
@@ -1511,7 +1525,7 @@ input[type="checkbox"], input[type="radio"] {
   background: #050505;
   border: 1px solid var(--border-soft);
   border-radius: 5px;
-  font-size: 8px;
+  font-size: 10px;
   line-height: 1.5;
   white-space: pre-wrap;
 }
@@ -1537,7 +1551,7 @@ input[type="checkbox"], input[type="radio"] {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 10px;
+  font-size: 12px;
   color: #d4d4d4;
   padding: 9px 10px;
   background: #161616;
@@ -1556,7 +1570,7 @@ input[type="checkbox"], input[type="radio"] {
 .progress-panel > div:first-child {
   display: flex;
   justify-content: space-between;
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .progress-panel span {
@@ -1628,7 +1642,7 @@ input[type="checkbox"], input[type="radio"] {
   background: rgba(18,18,18,.94);
   border: 1px solid var(--border);
   border-radius: 999px;
-  font-size: 10px;
+  font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1666,7 +1680,7 @@ input[type="checkbox"], input[type="radio"] {
   color: var(--muted);
   background: none;
   border: 0;
-  font-size: 10px;
+  font-size: 12px;
   text-align: center;
 }
 
@@ -1693,29 +1707,9 @@ input[type="checkbox"], input[type="radio"] {
   border-color: rgba(248, 113, 113, 0.28);
 }
 
-.checksum {
-  background: #0a0a0a;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  padding: 11px;
-  margin: 14px 0;
-}
-
-.checksum span {
-  color: var(--muted);
-  font-size: 8px;
-  display: block;
-  margin-bottom: 5px;
-}
-
-.checksum code {
-  font-size: 9px;
-  word-break: break-all;
-}
-
 .warning {
   color: var(--amber);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .diagnostics-page {
@@ -1733,7 +1727,7 @@ input[type="checkbox"], input[type="radio"] {
   justify-content: space-between;
   gap: 20px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .diagnostic-selections, .diagnostic-checklist {
@@ -1758,12 +1752,12 @@ input[type="checkbox"], input[type="radio"] {
 }
 
 .diagnostic-selections > header h3, .diagnostic-checklist > header h3 {
-  font-size: 16px;
+  font-size: 18px;
 }
 
 .diagnostic-selections > header p, .diagnostic-checklist > header p {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 14px;
   margin-top: 4px;
 }
 
@@ -1783,14 +1777,14 @@ input[type="checkbox"], input[type="radio"] {
 }
 
 .diagnostic-copy strong {
-  font-size: 13px;
+  font-size: 15px;
   color: #e5e5e5;
   font-weight: 550;
 }
 
 .diagnostic-copy p {
   color: #737373;
-  font-size: 11px;
+  font-size: 13px;
   margin: 4px 0 0;
   line-height: 1.45;
 }
@@ -1798,7 +1792,7 @@ input[type="checkbox"], input[type="radio"] {
 .diagnostic-copy code {
   display: block;
   color: #a3a3a3;
-  font-size: 10px;
+  font-size: 12px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1808,12 +1802,12 @@ input[type="checkbox"], input[type="radio"] {
 .diagnostic-copy small {
   display: block;
   color: #737373;
-  font-size: 10px;
+  font-size: 12px;
   margin-top: 4px;
 }
 
 .diagnostic-action button {
-  font-size: 11px;
+  font-size: 13px;
   padding: 7px 9px;
   white-space: nowrap;
 }
@@ -1831,7 +1825,7 @@ input[type="checkbox"], input[type="radio"] {
   border: 1px solid var(--border-soft);
   border-radius: 10px;
   color: #737373;
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .portable-paths summary {
@@ -1934,21 +1928,21 @@ input[type="checkbox"], input[type="radio"] {
 }
 
 .package-file-head strong {
-  font-size: 13px;
+  font-size: 15px;
 }
 
 .package-file-head code {
   margin-top: 5px;
   overflow: hidden;
   color: var(--muted);
-  font-size: 9px;
+  font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .package-file-head > span {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   white-space: nowrap;
 }
 
@@ -1974,12 +1968,12 @@ input[type="checkbox"], input[type="radio"] {
   color: var(--text);
   background: var(--surface-2);
   cursor: pointer;
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .package-contents > summary small {
   color: var(--muted);
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .package-entry-list {
@@ -2002,20 +1996,20 @@ input[type="checkbox"], input[type="radio"] {
 .package-entry code {
   overflow: hidden;
   color: #cccccc;
-  font-size: 9px;
+  font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .package-entry span {
   color: var(--muted);
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .package-entry-empty, .package-entry-limit {
   padding: 14px 16px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .package-entry-limit {
@@ -2033,13 +2027,13 @@ input[type="checkbox"], input[type="radio"] {
 
 .combine-panel h3 {
   margin: 6px 0;
-  font-size: 15px;
+  font-size: 17px;
 }
 
 .combine-panel p {
   margin: 0;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .package-combine-progress {
@@ -2055,7 +2049,7 @@ input[type="checkbox"], input[type="radio"] {
   margin: 14px 0 0;
   overflow-wrap: anywhere;
   color: #cccccc;
-  font-size: 10px;
+  font-size: 12px;
 }
 
 /* Sits above the mounted shell so startup crossfades instead of cutting. */
@@ -2079,7 +2073,7 @@ input[type="checkbox"], input[type="radio"] {
 }
 
 .boot-screen h1 {
-  font-size: 18px;
+  font-size: 20px;
   margin: 16px 0 4px;
   color: #fafafa;
   font-weight: 620;
@@ -2087,7 +2081,7 @@ input[type="checkbox"], input[type="radio"] {
 
 .boot-screen p {
   color: #737373;
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .startup-failure .brand-mark {
@@ -2172,7 +2166,7 @@ summary:focus-visible {
   content: "Workspace";
   padding: 8px 10px 6px;
   color: #525252;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -2193,7 +2187,7 @@ summary:focus-visible {
 .diagnostics-header h2 {
   margin: 10px 0;
   color: #fafafa;
-  font-size: 30px;
+  font-size: 32px;
   font-weight: 650;
   line-height: 1.16;
   letter-spacing: -0.035em;
@@ -2202,14 +2196,14 @@ summary:focus-visible {
 .build-card p,
 .diagnostics-header p {
   color: #a3a3a3;
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.65;
 }
 
 .section-heading h3 {
   margin-top: 1px;
   color: #f5f5f5;
-  font-size: 15px;
+  font-size: 17px;
   font-weight: 600;
   letter-spacing: -0.015em;
 }
@@ -2222,7 +2216,7 @@ select {
   background: #0a0a0a;
   border-color: var(--input);
   border-radius: 6px;
-  font-size: 11px;
+  font-size: 13px;
 }
 
 input::placeholder {
@@ -2274,7 +2268,7 @@ input[type="radio"] {
 
 .editor h3 {
   color: #fafafa;
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 620;
   letter-spacing: -0.02em;
 }
@@ -2470,13 +2464,13 @@ input[type="radio"] {
 
 .project-required strong {
   color: var(--foreground);
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .project-required span {
   margin-top: 4px;
   color: var(--muted-foreground);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.45;
 }
 
@@ -2518,14 +2512,14 @@ input[type="radio"] {
 .modal-header h2 {
   margin: 7px 0 4px;
   color: var(--foreground);
-  font-size: 21px;
+  font-size: 23px;
   letter-spacing: -0.02em;
 }
 
 .modal-header p {
   margin: 0;
   color: var(--muted-foreground);
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.5;
 }
 
@@ -2574,13 +2568,13 @@ input[type="radio"] {
 }
 
 .setup-count strong {
-  font-size: 18px;
+  font-size: 20px;
 }
 
 .setup-count span {
   margin-top: 2px;
   color: var(--muted-foreground);
-  font-size: 9px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
@@ -2606,7 +2600,7 @@ input[type="radio"] {
 
 .setup-wizard-footer > span {
   color: var(--muted-foreground);
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .about-page {
@@ -2616,7 +2610,7 @@ input[type="radio"] {
 .about-links p {
   margin: 0;
   color: var(--muted-foreground);
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .about-grid {
@@ -2642,7 +2636,7 @@ input[type="radio"] {
   max-width: 680px;
   margin-top: 5px;
   color: var(--muted-foreground);
-  font-size: 11px;
+  font-size: 13px;
   line-height: 1.5;
 }
 
@@ -2715,7 +2709,7 @@ input[type="radio"] {
   display: block;
   margin: 1px 0 5px;
   color: var(--muted-foreground);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -2723,7 +2717,7 @@ input[type="radio"] {
 
 .tutorial-card h2 {
   margin: 0;
-  font-size: 18px;
+  font-size: 20px;
   letter-spacing: -0.02em;
 }
 
@@ -2731,7 +2725,7 @@ input[type="radio"] {
   margin: 0;
   padding: 16px 18px 12px;
   color: #d4d4d4;
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.55;
 }
 
@@ -2746,7 +2740,7 @@ input[type="radio"] {
   background: var(--secondary);
   border: 1px solid var(--border);
   border-radius: 9px;
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.45;
 }
 
@@ -2800,7 +2794,7 @@ input[type="radio"] {
 .about-build dt,
 .about-build dd {
   margin: 0;
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .about-build dt {
@@ -2838,13 +2832,13 @@ input[type="radio"] {
 }
 
 .update-state strong {
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .update-state span {
   margin-top: 5px;
   color: var(--muted-foreground);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.45;
 }
 
@@ -2858,7 +2852,7 @@ input[type="radio"] {
 
 .about-links h3 {
   margin: 0 0 5px;
-  font-size: 15px;
+  font-size: 17px;
 }
 
 .update-backdrop {
@@ -2878,7 +2872,7 @@ input[type="radio"] {
   max-height: 220px;
   overflow: auto;
   color: #d4d4d4;
-  font-size: 11px;
+  font-size: 13px;
   line-height: 1.6;
   white-space: pre-wrap;
 }
@@ -2921,6 +2915,16 @@ input[type="radio"] {
   list-style: none;
 }
 
+/* Project rows are borderless, so their padding exists only to inset the hover
+   highlight. Pulling the list out by that same amount puts the row's content
+   back on the card's content grid: the project name lines up with the
+   "Projects" heading and the status pill with the "All projects" button. */
+.overview-project-list {
+  /* Row padding (12px) plus the row's transparent 1px border, which the hover
+     state colours in. */
+  margin-inline: -13px;
+}
+
 .overview-blocker-list li {
   display: grid;
   grid-template-columns: 18px auto minmax(0, 1fr);
@@ -2933,7 +2937,7 @@ input[type="radio"] {
 }
 
 .overview-blocker-list strong {
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 550;
 }
 
@@ -2941,7 +2945,7 @@ input[type="radio"] {
   min-width: 0;
   overflow: hidden;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2949,7 +2953,7 @@ input[type="radio"] {
 .overview-more {
   margin: 9px 0 0;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .overview-project-list > li > button {
@@ -2984,7 +2988,7 @@ input[type="radio"] {
 
 .overview-project-name strong {
   overflow: hidden;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 550;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2992,30 +2996,36 @@ input[type="radio"] {
 
 .overview-project-name small {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .overview-build-state {
   flex: 0 0 auto;
-  padding: 3px 9px;
+  padding: 4px 10px;
   border: 1px solid var(--border);
-  border-radius: 999px;
-  font-size: 9px;
+  border-radius: 6px;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 600;
   white-space: nowrap;
 }
 
 .overview-build-state.neutral {
-  color: var(--muted);
+  color: #ffffff;
+  background: #404040;
+  border-color: #525252;
 }
 
 .overview-build-state.passed {
-  color: #86efac;
-  border-color: rgba(74, 222, 128, 0.28);
+  color: #ffffff;
+  background: #15803d;
+  border-color: #22c55e;
 }
 
 .overview-build-state.failed {
-  color: #fca5a5;
-  border-color: rgba(248, 113, 113, 0.28);
+  color: #ffffff;
+  background: #991b1b;
+  border-color: #ef4444;
 }
 
 /* Shared page lead-in. Deliberately not a card: the first card on a page
@@ -3036,7 +3046,7 @@ input[type="radio"] {
 .page-heading h2 {
   margin: 0;
   color: var(--foreground);
-  font-size: 26px;
+  font-size: 28px;
   font-weight: 620;
   line-height: 1.15;
   letter-spacing: -0.025em;
@@ -3046,7 +3056,7 @@ input[type="radio"] {
   max-width: 760px;
   margin: 7px 0 0;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 15px;
   line-height: 1.6;
 }
 
@@ -3070,7 +3080,7 @@ input[type="radio"] {
 }
 
 .confirm-modal .modal-header h2 {
-  font-size: 17px;
+  font-size: 19px;
 }
 
 /* Overview: projects whose game archive no longer matches the indexed one. */
@@ -3111,7 +3121,7 @@ input[type="radio"] {
 
 .overview-stale-list strong {
   overflow: hidden;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 550;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3119,7 +3129,7 @@ input[type="radio"] {
 
 .overview-stale-list small {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .compatibility-summary .primary {
@@ -3130,6 +3140,6 @@ input[type="radio"] {
   max-width: 780px;
   margin: 4px 2px 0;
   color: #737373;
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.6;
 }

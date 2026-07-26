@@ -29,7 +29,9 @@ def write_vtex_descriptor(
     color_space: str,
     normal_map: bool,
 ) -> None:
-    output_format = "DXT5" if has_alpha else "DXT1"
+    output_format = "DXT1"
+    if has_alpha:
+        output_format = "DXT5"
     if normal_map:
         output_format = "BC5"
     descriptor = f"""<!-- dmx encoding keyvalues2_noids 1 format vtex 1 -->
@@ -88,11 +90,9 @@ def validate_visual_source(source: Path, kind: VisualResourceKind) -> Path:
     source = source.resolve(strict=True)
     if not source.is_file():
         raise validation_error("Choose a visual replacement file.")
-    allowed = (
-        IMAGE_EXTENSIONS
-        if kind == VisualResourceKind.TEXTURE
-        else MATERIAL_EXTENSIONS
-    )
+    allowed = MATERIAL_EXTENSIONS
+    if kind == VisualResourceKind.TEXTURE:
+        allowed = IMAGE_EXTENSIONS
     if source.suffix.lower() not in allowed:
         expected = ", ".join(sorted(allowed))
         raise validation_error(
@@ -138,11 +138,16 @@ def _inspect_texture(paths: AppPaths, source: Path) -> VisualSourceMetadata:
                 marker in source.stem.casefold()
                 for marker in ("_normal", "_norm", "_nrm")
             )
-            color_space = "linear" if probable_normal else "srgb"
+            color_space = "srgb"
+            if probable_normal:
+                color_space = "linear"
             preview_root = paths.cache / "visual-previews"
             preview_root.mkdir(parents=True, exist_ok=True)
             preview = preview_root / f"{uuid.uuid4().hex}.png"
-            converted = image.convert("RGBA" if has_alpha else "RGB")
+            image_mode = "RGB"
+            if has_alpha:
+                image_mode = "RGBA"
+            converted = image.convert(image_mode)
             converted.thumbnail((1600, 1600))
             converted.save(preview, "PNG")
     except UnidentifiedImageError as error:

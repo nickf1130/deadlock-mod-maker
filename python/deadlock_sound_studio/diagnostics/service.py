@@ -29,6 +29,27 @@ def _first_existing(paths: list[Path]) -> Path | None:
     return None
 
 
+def _paths_below(root: Path | None, relative_paths: list[str]) -> list[Path]:
+    """Build candidate paths only when their shared root is available."""
+    if root is None:
+        return []
+    return [root / relative_path for relative_path in relative_paths]
+
+
+def _system_command(name: str) -> list[Path]:
+    """Return a PATH-discovered command as a candidate when it exists."""
+    command = shutil.which(name)
+    if command is None:
+        return []
+    return [Path(command)]
+
+
+def _path_text(path: Path | None) -> str | None:
+    if path is None:
+        return None
+    return str(path)
+
+
 def _file_version(path: Path | None) -> str | None:
     if not path or os.name != "nt":
         return None
@@ -94,18 +115,28 @@ def _check(
     is_directory: bool = False,
     version: str | None = None,
 ) -> ToolCheck:
-    found = bool(path and (path.is_dir() if is_directory else path.is_file()))
+    found = False
+    if path is not None:
+        if is_directory:
+            found = path.is_dir()
+        else:
+            found = path.is_file()
+
+    status = CheckStatus.MISSING
+    resolved_path = None
+    detail = "Not found in the selected tools or system path."
+    if found:
+        status = CheckStatus.FOUND
+        resolved_path = str(path)
+        detail = "Found and accessible."
+
     return ToolCheck(
         id=identifier,
         label=label,
-        status=CheckStatus.FOUND if found else CheckStatus.MISSING,
-        path=str(path) if path and path.exists() else None,
+        status=status,
+        path=resolved_path,
         version=version,
-        detail=(
-            "Found and accessible."
-            if found
-            else "Not found in the selected tools or system path."
-        ),
+        detail=detail,
     )
 
 
@@ -116,43 +147,41 @@ def run_diagnostics(
 ) -> DiagnosticReport:
     """Locate external tools and report the capabilities available to the app."""
     _emit(progress, "starting", 0, "Locating the selected CSDK folder…")
-    desktop = Path.home() / "Desktop"
     csdk = optional_existing(settings.csdk_root_override) or _first_existing(
         [
             paths.tools / "CSDK12",
             paths.tools / "Reduced_CSDK_12",
             paths.tools / "Reduced CSDK 12",
-            desktop / "Reduced_CSDK_12",
-            desktop / "Reduced CSDK 12",
         ]
     )
     if csdk and csdk.is_file():
         csdk = csdk.parent
     _emit(progress, "csdkRoot", 1, "Inspecting the CSDK layout…")
 
-    csdk_config = csdk / "csdkcfg.exe" if csdk else None
+    csdk_config = None
+    if csdk is not None:
+        csdk_config = csdk / "csdkcfg.exe"
+
     resource_compiler = _first_existing(
-        [
-            csdk / "game/bin_cs2/win64/resourcecompiler.exe"
-            if csdk
-            else Path("__missing__"),
-            csdk / "game/bin/win64/resourcecompiler.exe"
-            if csdk
-            else Path("__missing__"),
-            csdk / "game/bin_tools/win64/resourcecompiler.exe"
-            if csdk
-            else Path("__missing__"),
-        ]
+        _paths_below(
+            csdk,
+            [
+                "game/bin_cs2/win64/resourcecompiler.exe",
+                "game/bin/win64/resourcecompiler.exe",
+                "game/bin_tools/win64/resourcecompiler.exe",
+            ],
+        )
     )
     vpk_packager = optional_existing(
         settings.vpk_packager_override
     ) or _first_existing(
-        [
-            csdk / "game/bin/win64/vpk.exe" if csdk else Path("__missing__"),
-            csdk / "game/bin/win64/CSDKCfgVPK.exe"
-            if csdk
-            else Path("__missing__"),
-        ]
+        _paths_below(
+            csdk,
+            [
+                "game/bin/win64/vpk.exe",
+                "game/bin/win64/CSDKCfgVPK.exe",
+            ],
+        )
     )
     _emit(
         progress,
@@ -167,28 +196,22 @@ def run_diagnostics(
         [
             paths.tools / "Source2Viewer/Source2Viewer.exe",
             paths.tools / "ValveResourceFormat/Source2Viewer.exe",
-            desktop / "Source2Viewer.exe",
         ]
     )
+    source_viewer_cli_candidates = [
+        paths.tools / "Source2Viewer/Source2Viewer-CLI.exe",
+        paths.tools / "ValveResourceFormat/Source2Viewer-CLI.exe",
+    ]
+    if source_viewer is not None:
+        if "cli" in source_viewer.stem.lower():
+            source_viewer_cli_candidates.append(source_viewer)
+        source_viewer_cli_candidates.append(
+            source_viewer.with_name("Source2Viewer-CLI.exe")
+        )
+
     source_viewer_cli = optional_existing(
         settings.source2_viewer_cli_override
-    ) or _first_existing(
-        [
-            paths.tools / "Source2Viewer/Source2Viewer-CLI.exe",
-            paths.tools / "ValveResourceFormat/Source2Viewer-CLI.exe",
-            (
-                source_viewer
-                if source_viewer and "cli" in source_viewer.stem.lower()
-                else Path("__missing__")
-            ),
-            (
-                source_viewer.with_name("Source2Viewer-CLI.exe")
-                if source_viewer
-                else Path("__missing__")
-            ),
-            desktop / "Source2Viewer-CLI.exe",
-        ]
-    )
+    ) or _first_existing(source_viewer_cli_candidates)
     _emit(
         progress,
         "source2Viewer",
@@ -197,24 +220,28 @@ def run_diagnostics(
     )
 
     ffmpeg = optional_existing(settings.ffmpeg_override) or _first_existing(
-        [
-            paths.tools / "ffmpeg/ffmpeg.exe",
-            Path(shutil.which("ffmpeg") or "__missing__"),
-        ]
+        [paths.tools / "ffmpeg/ffmpeg.exe"] + _system_command("ffmpeg")
     )
+    ffmpeg_directory = None
+    if ffmpeg is not None:
+        ffmpeg_directory = ffmpeg.parent
     ffprobe = optional_existing(settings.ffprobe_override) or _first_existing(
-        [
-            paths.tools / "ffmpeg/ffprobe.exe",
-            ffmpeg.parent / "ffprobe.exe" if ffmpeg else Path("__missing__"),
-            Path(shutil.which("ffprobe") or "__missing__"),
-        ]
+        [paths.tools / "ffmpeg/ffprobe.exe"]
+        + _paths_below(ffmpeg_directory, ["ffprobe.exe"])
+        + _system_command("ffprobe")
     )
-    ffmpeg_version = probe_output(ffmpeg, ["-version"]) if ffmpeg else None
-    ffprobe_version = probe_output(ffprobe, ["-version"]) if ffprobe else None
+    ffmpeg_version = None
+    if ffmpeg is not None:
+        ffmpeg_version = probe_output(ffmpeg, ["-version"])
+    ffprobe_version = None
+    if ffprobe is not None:
+        ffprobe_version = probe_output(ffprobe, ["-version"])
     _emit(progress, "mediaTools", 4, "Checking FFmpeg and FFprobe…")
 
     deadlock = optional_existing(settings.deadlock_root_override) or locate_deadlock()
-    archive = deadlock / "game/citadel/pak01_dir.vpk" if deadlock else None
+    archive = None
+    if deadlock is not None:
+        archive = deadlock / "game/citadel/pak01_dir.vpk"
     _emit(
         progress,
         "deadlock",
@@ -222,34 +249,64 @@ def run_diagnostics(
         "Checking the Steam installation and Deadlock archive…",
     )
 
+    compiler_directory = None
+    if resource_compiler is not None:
+        compiler_directory = resource_compiler.parent
     lame = _first_existing(
-        [
-            resource_compiler.parent / "lame_enc.dll"
-            if resource_compiler
-            else Path("__missing__"),
-            csdk / "game/bin/win64/lame_enc.dll" if csdk else Path("__missing__"),
-            csdk / "game/bin_tools/win64/lame_enc.dll"
-            if csdk
-            else Path("__missing__"),
-        ]
+        _paths_below(
+            compiler_directory,
+            ["lame_enc.dll"],
+        )
+        + _paths_below(
+            csdk,
+            [
+                "game/bin/win64/lame_enc.dll",
+                "game/bin_tools/win64/lame_enc.dll",
+            ],
+        )
     )
     _emit(progress, "encoder", 6, "Checking the CSDK audio encoder…")
 
+    csdk_config_text = None
+    if csdk_config is not None and csdk_config.is_file():
+        csdk_config_text = str(csdk_config)
+    archive_text = None
+    if archive is not None and archive.is_file():
+        archive_text = str(archive)
+
     resolved = ResolvedTools(
-        csdk_root=str(csdk) if csdk else None,
-        csdk_config=(
-            str(csdk_config) if csdk_config and csdk_config.is_file() else None
-        ),
-        resource_compiler=str(resource_compiler) if resource_compiler else None,
-        vpk_packager=str(vpk_packager) if vpk_packager else None,
-        source2_viewer=str(source_viewer) if source_viewer else None,
-        source2_viewer_cli=str(source_viewer_cli) if source_viewer_cli else None,
-        ffmpeg=str(ffmpeg) if ffmpeg else None,
-        ffprobe=str(ffprobe) if ffprobe else None,
-        deadlock_root=str(deadlock) if deadlock else None,
-        deadlock_archive=str(archive) if archive and archive.is_file() else None,
-        lame_encoder=str(lame) if lame else None,
+        csdk_root=_path_text(csdk),
+        csdk_config=csdk_config_text,
+        resource_compiler=_path_text(resource_compiler),
+        vpk_packager=_path_text(vpk_packager),
+        source2_viewer=_path_text(source_viewer),
+        source2_viewer_cli=_path_text(source_viewer_cli),
+        ffmpeg=_path_text(ffmpeg),
+        ffprobe=_path_text(ffprobe),
+        deadlock_root=_path_text(deadlock),
+        deadlock_archive=archive_text,
+        lame_encoder=_path_text(lame),
     )
+    content_addons = None
+    game_addons = None
+    if csdk is not None:
+        content_addons = csdk / "content/citadel_addons"
+        game_addons = csdk / "game/citadel_addons"
+
+    source_viewer_cli_status = CheckStatus.CAPABILITY_UNAVAILABLE
+    source_viewer_cli_path = None
+    source_viewer_cli_detail = "Source2Viewer-CLI.exe was not found."
+    if source_viewer_cli is not None:
+        source_viewer_cli_status = CheckStatus.FOUND
+        source_viewer_cli_path = str(source_viewer_cli)
+        source_viewer_cli_detail = "Selective headless export is available."
+    elif source_viewer is not None:
+        source_viewer_cli_path = str(source_viewer)
+        source_viewer_cli_detail = (
+            "The GUI was found, but selective preview requires "
+            "Source2Viewer-CLI.exe."
+        )
+
     checks = [
         _check("csdkRoot", "CSDK 12 root", csdk, is_directory=True),
         _check("csdkConfig", "csdkcfg.exe", csdk_config),
@@ -258,13 +315,13 @@ def run_diagnostics(
         _check(
             "contentAddons",
             "CSDK content/citadel_addons",
-            csdk / "content/citadel_addons" if csdk else None,
+            content_addons,
             is_directory=True,
         ),
         _check(
             "gameAddons",
             "CSDK game/citadel_addons",
-            csdk / "game/citadel_addons" if csdk else None,
+            game_addons,
             is_directory=True,
         ),
         _check(
@@ -276,27 +333,10 @@ def run_diagnostics(
         ToolCheck(
             id="source2ViewerCli",
             label="Source 2 Viewer CLI",
-            status=(
-                CheckStatus.FOUND
-                if source_viewer_cli
-                else CheckStatus.CAPABILITY_UNAVAILABLE
-            ),
-            path=(
-                str(source_viewer_cli or source_viewer)
-                if source_viewer_cli or source_viewer
-                else None
-            ),
+            status=source_viewer_cli_status,
+            path=source_viewer_cli_path,
             version=_file_version(source_viewer_cli or source_viewer),
-            detail=(
-                "Selective headless export is available."
-                if source_viewer_cli
-                else (
-                    "The GUI was found, but selective preview requires "
-                    "Source2Viewer-CLI.exe."
-                    if source_viewer
-                    else "Source2Viewer-CLI.exe was not found."
-                )
-            ),
+            detail=source_viewer_cli_detail,
         ),
         _check("ffmpeg", "FFmpeg", ffmpeg, version=ffmpeg_version),
         _check("ffprobe", "FFprobe", ffprobe, version=ffprobe_version),

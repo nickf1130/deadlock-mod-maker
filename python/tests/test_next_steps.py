@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import csv
+import zipfile
 from pathlib import Path
 
 from deadlock_sound_studio.build import (
     create_compatibility_copy,
+    create_zip,
     latest_compiled,
-    write_item_logs,
+    write_failure_report,
 )
 from deadlock_sound_studio.models import (
+    BuildHistoryEntry,
     LoopSettings,
     ItemBuildResult,
     ItemStatus,
@@ -21,6 +24,56 @@ from deadlock_sound_studio.protocol.router import BackendRouter
 from deadlock_sound_studio.settings import save_settings
 
 from conftest import make_asset, write_vpk, write_wav
+
+
+def test_successful_project_migration_removes_only_generated_clutter(
+    paths,
+    database,
+):
+    projects = ProjectService(paths, database)
+    project = projects.create("Legacy Layout")
+    project_root = paths.project(project.id)
+    for directory_name in ("build-output", "compiled-game", "staging", "logs"):
+        generated = project_root / directory_name / "build-0001" / "generated.bin"
+        generated.parent.mkdir(parents=True)
+        generated.write_bytes(b"duplicate")
+    failure_report = project_root / "failures" / "build-0000-items.json"
+    failure_report.parent.mkdir()
+    failure_report.write_text("[]", encoding="utf-8")
+    build_backup = paths.backups / project.id / "build-0001" / "generated.bin"
+    build_backup.parent.mkdir(parents=True)
+    build_backup.write_bytes(b"duplicate")
+    export_directory = paths.exports / project.name / "build-0001"
+    export_directory.mkdir(parents=True)
+    exported_vpk = export_directory / f"{project.name}.vpk"
+    exported_vpk.write_bytes(b"final export")
+    (export_directory / "checksums.txt").write_text("legacy", encoding="utf-8")
+    (export_directory / "build-report.json").write_text("{}", encoding="utf-8")
+    project.build_history.append(
+        BuildHistoryEntry(
+            version="build-0001",
+            started_at=utc_now(),
+            finished_at=utc_now(),
+            success=True,
+            output_relative_path=str(
+                exported_vpk.relative_to(paths.root)
+            ).replace("\\", "/"),
+        )
+    )
+    projects.save(project)
+
+    projects.clear_exported_build_artifacts()
+
+    assert {path.name for path in project_root.iterdir()} == {
+        "failures",
+        "project.json",
+    }
+    assert failure_report.is_file()
+    assert exported_vpk.is_file()
+    assert not (export_directory / "checksums.txt").exists()
+    assert not (export_directory / "build-report.json").exists()
+    assert not build_backup.exists()
+    assert (paths.backups / project.id / "project.previous.json").is_file()
 
 
 def test_catalog_replacement_removes_assets_deleted_by_game_update(database):
@@ -258,20 +311,37 @@ def test_compatibility_copy_keeps_descriptive_export(
     assert canonical.read_bytes() == b"validated-vpk"
     assert compatibility.name == "pak01_dir.vpk"
     assert compatibility.read_bytes() == canonical.read_bytes()
-    assert "pak01_dir.vpk" in (export / "checksums.txt").read_text(encoding="utf-8")
+    assert not (export / "checksums.txt").exists()
+
+
+def test_sharing_zip_excludes_legacy_diagnostic_artifacts(paths, database):
+    projects = ProjectService(paths, database)
+    project = projects.create("Shareable Pack")
+    export = paths.exports / project.name / "build-0001"
+    export.mkdir(parents=True)
+    (export / f"{project.name}.vpk").write_bytes(b"validated-vpk")
+    (export / "README.txt").write_text("Install this VPK.", encoding="utf-8")
+    (export / "checksums.txt").write_text("legacy", encoding="utf-8")
+    (export / "build-report.json").write_text("{}", encoding="utf-8")
+
+    output = Path(create_zip(paths, projects, project.id, "build-0001"))
+
+    with zipfile.ZipFile(output) as archive:
+        assert set(archive.namelist()) == {
+            f"{project.name}.vpk",
+            "README.txt",
+        }
 
 
 def test_failed_item_retry_reuses_latest_nonempty_compiled_output(paths):
     project_root = paths.project("retry-project")
-    older = (
-        project_root
-        / "compiled-game/build-0001/sounds/ui/reusable.vsnd_c"
+    older = project_root / (
+        ".build-cache/build-0001/staging/sounds/ui/reusable.vsnd_c"
     )
     older.parent.mkdir(parents=True)
     older.write_bytes(b"verified")
-    empty = (
-        project_root
-        / "compiled-game/build-0002/sounds/ui/reusable.vsnd_c"
+    empty = project_root / (
+        ".build-cache/build-0002/staging/sounds/ui/reusable.vsnd_c"
     )
     empty.parent.mkdir(parents=True)
     empty.write_bytes(b"")
@@ -279,7 +349,7 @@ def test_failed_item_retry_reuses_latest_nonempty_compiled_output(paths):
     reusable = latest_compiled(
         project_root, "sounds/ui/reusable.vsnd_c", "build-0003"
     )
-    log_path = write_item_logs(
+    log_path = write_failure_report(
         project_root,
         "build-0003",
         [
@@ -294,4 +364,5 @@ def test_failed_item_retry_reuses_latest_nonempty_compiled_output(paths):
     )
 
     assert reusable == older
+    assert log_path.parent.name == "failures"
     assert '"reusedCompiledOutput": true' in log_path.read_text(encoding="utf-8")

@@ -3,7 +3,7 @@ from .service import (
     create_compatibility_copy,
     create_zip,
     latest_compiled,
-    write_item_logs,
+    write_failure_report,
 )
 
 __all__ = [
@@ -11,5 +11,5 @@ __all__ = [
     "create_compatibility_copy",
     "create_zip",
     "latest_compiled",
-    "write_item_logs",
+    "write_failure_report",
 ]

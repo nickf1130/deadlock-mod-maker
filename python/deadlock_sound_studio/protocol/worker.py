@@ -5,6 +5,7 @@ import logging
 import sys
 import threading
 from logging.handlers import RotatingFileHandler
+from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -31,14 +32,24 @@ class ProtocolWriter:
             sys.stdout.flush()
 
 
+class ErrorFileHandler(RotatingFileHandler):
+    """Create the application log only when an error is actually written."""
+
+    def emit(self, record: logging.LogRecord) -> None:
+        Path(self.baseFilename).parent.mkdir(parents=True, exist_ok=True)
+        super().emit(record)
+
+
 def run_worker() -> None:
     paths = AppPaths.resolve()
-    file_handler = RotatingFileHandler(
+    file_handler = ErrorFileHandler(
         paths.logs / "python-worker.log",
         maxBytes=2 * 1024 * 1024,
         backupCount=3,
         encoding="utf-8",
+        delay=True,
     )
+    file_handler.setLevel(logging.ERROR)
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(message)s",

@@ -16,9 +16,8 @@
     "noEmit": true,
     "jsx": "react-jsx",
     "types": ["vitest/globals"],
-    "baseUrl": ".",
     "paths": {
-      "@renderer/*": ["apps/renderer/src/*"]
+      "@renderer/*": ["./apps/renderer/src/*"]
     }
   },
   "include": ["apps/renderer/src"]

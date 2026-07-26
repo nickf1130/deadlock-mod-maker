@@ -1,16 +1,12 @@
 # Deadlock Mod Maker
 
-A Windows app for making sound mods for Valve's Deadlock.
+A Windows app for making sound mods (and eventually more!) for Valve's Deadlock.
 
 Pick a sound from the game, choose a file to replace it with, and Deadlock Mod Maker
 compiles and packages it into a `.vpk` mod file. You do not need to know how to program, use a
 command line, or manually run any modding tools.
 
-The supported v1.0.0 workflow is sound replacement. An early Visuals workspace is included for
-texture and material experiments, but it is a preview feature rather than part of the supported
-1.0 workflow. Models and other complex assets remain future work.
-
-> Deadlock Mod Maker is a project made by me alone and is in no way affiliated with Valve.
+> NOTE: Deadlock Mod Maker is a project made by me alone and is in no way affiliated with Valve.
 
 ---
 
@@ -48,7 +44,7 @@ Deadlock Mod Maker does not come bundled with the CSDK12 zip. Please visit:
 
 [CSDK 12 - DeadlockModding](https://deadlockmodding.pages.dev/modding-tools/csdk-12)
 
-You need the **Deadlock CSDK 12** (also distributed as "Reduced CSDK 12") in order to use Deadlock Mod Maker. Unzip it somewhere permanent, such as `C:\Deadlock\CSDK12\` or your Desktop.
+You need the **Deadlock CSDK 12** (also distributed as "Reduced CSDK 12") in order to use Deadlock Mod Maker. Unzip it somewhere permanent, such as `C:\Deadlock\CSDK12\`, then choose that folder in the setup checklist.
 
 You should end up with a folder that contains `csdkcfg.exe` and a `game` folder inside it.
 
@@ -211,22 +207,8 @@ Produce a portable Windows build in `release/`:
 npm run dist
 ```
 
-`npm run dist` creates a clean, pinned Python environment before packaging, verifies the
+`npm run dist` creates a clean Python environment before packaging, verifies the
 portable layout, and writes a `.sha256` checksum beside the executable.
-
-### How it fits together
-
-- **Electron main process** - window, IPC, file dialogs, and supervision of the Python worker.
-  `contextIsolation` is on, the renderer has no Node integration, and IPC is allowlisted.
-- **React renderer** - the interface. Talks only to the allowlisted IPC surface.
-- **Python worker** - indexing, audio and texture processing, CSDK compilation, VPK packaging and
-  verification. Speaks newline-delimited JSON-RPC over stdin/stdout.
-
-A build is reported successful only when every enabled item compiled to its expected target, the
-packaged VPK contains exactly those targets and nothing else, and a SHA-256 checksum and report
-were written beside the export.
-
-More detail lives in [SETUP.md](SETUP.md).
 
 ---
 
@@ -243,4 +225,4 @@ even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE
 
 Deadlock and all related assets are the property of Valve Corporation. This tool bundles no Valve
 content and does not redistribute any game files. FFmpeg and Source 2 Viewer are downloaded from
-their own publishers at your request and remain under their own licences.
+their own publishers and remain under their own licences.

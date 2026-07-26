@@ -71,8 +71,12 @@ def list_vpk(path: Path) -> list[VpkEntry]:
                     preload_data = stream.read(preload)
                     if len(preload_data) != preload:
                         raise StudioError("VPK_INVALID", "VPK entry preload data is truncated")
-                    directory_value = "" if directory == " " else directory
-                    extension_value = "" if extension == " " else f".{extension}"
+                    directory_value = directory
+                    if directory == " ":
+                        directory_value = ""
+                    extension_value = f".{extension}"
+                    if extension == " ":
+                        extension_value = ""
                     raw_path = f"{directory_value}/{filename}{extension_value}".lstrip("/")
                     entries.append(
                         VpkEntry(
@@ -107,7 +111,9 @@ def read_vpk_entry(path: Path, entry: VpkEntry, *, max_bytes: int = 8_000_000) -
             signature, version, tree_size = struct.unpack("<III", header)
             if signature != VPK_SIGNATURE or version not in (1, 2):
                 raise StudioError("VPK_INVALID", "Unsupported or invalid VPK header")
-            header_size = 28 if version == 2 else 12
+            header_size = 12
+            if version == 2:
+                header_size = 28
             stream.seek(header_size + tree_size + entry.offset)
             payload.extend(stream.read(entry.length))
     else:
@@ -148,7 +154,9 @@ def copy_vpk_entry(path: Path, entry: VpkEntry, destination: BinaryIO) -> int:
             signature, version, tree_size = struct.unpack("<III", header)
             if signature != VPK_SIGNATURE or version not in (1, 2):
                 raise StudioError("VPK_INVALID", "Unsupported or invalid VPK header")
-            header_size = 28 if version == 2 else 12
+            header_size = 12
+            if version == 2:
+                header_size = 28
             stream.seek(header_size + tree_size + entry.offset)
             _copy_exact(stream, destination, remaining, entry.path)
     else:

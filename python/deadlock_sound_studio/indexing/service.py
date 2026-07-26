@@ -86,13 +86,11 @@ def index_archive(database: Database, archive: Path) -> IndexResult:
     metadata = read_catalog_metadata(archive, entries)
     for entry in entries:
         internal = normalize_internal_path(entry.path)
-        visual_kind = (
-            VisualResourceKind.TEXTURE
-            if internal.lower().endswith(".vtex_c")
-            else VisualResourceKind.MATERIAL
-            if internal.lower().endswith(".vmat_c")
-            else None
-        )
+        visual_kind = None
+        if internal.lower().endswith(".vtex_c"):
+            visual_kind = VisualResourceKind.TEXTURE
+        elif internal.lower().endswith(".vmat_c"):
+            visual_kind = VisualResourceKind.MATERIAL
         if visual_kind:
             visual_assets.append(
                 VisualResourceAsset(
@@ -115,9 +113,12 @@ def index_archive(database: Database, archive: Path) -> IndexResult:
         category, hero, ability = classify_sound(internal)
         association = association_for(metadata, internal)
         hero = association.hero_id or hero
-        ability_label = association.ability_name or (
-            ability.replace("_", " ").title() if ability else None
-        )
+        ability_label = association.ability_name
+        if not ability_label and ability:
+            ability_label = ability.replace("_", " ").title()
+        hero_name = association.hero_name or hero_display_name(metadata, hero)
+        if not hero_name and hero:
+            hero_name = hero.replace("_", " ").title()
         filename = PurePosixPath(internal).name
         asset_id = hashlib.sha256(
             internal.lower().encode("utf-8")
@@ -131,11 +132,7 @@ def index_archive(database: Database, archive: Path) -> IndexResult:
                 extension=".vsnd_c",
                 category=category,
                 hero_id=hero,
-                hero_name=(
-                    association.hero_name
-                    or hero_display_name(metadata, hero)
-                    or (hero.replace("_", " ").title() if hero else None)
-                ),
+                hero_name=hero_name,
                 ability_name=ability_label,
                 sound_event=association.sound_event,
                 source_archive=str(archive),

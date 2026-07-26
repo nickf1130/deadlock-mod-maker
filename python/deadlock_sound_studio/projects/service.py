@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import shutil
 import uuid
 from pathlib import Path
@@ -26,9 +27,8 @@ from ..models import (
 from ..paths import AppPaths, normalize_addon_name, normalize_internal_path
 from ..visuals import inspect_visual_source, validate_visual_source
 
-PROJECT_DIRECTORIES = (
-    "source-files",
-    "visual-source-files",
+DISPOSABLE_BUILD_DIRECTORIES = (
+    ".build-cache",
     "processed-audio",
     "previews",
     "generated-content",
@@ -37,6 +37,34 @@ PROJECT_DIRECTORIES = (
     "build-output",
     "logs",
 )
+
+
+def clear_project_build_artifacts(
+    project_root: Path,
+    backup_project_root: Path | None = None,
+) -> None:
+    """Remove generated build data while preserving project sources and failures."""
+    resolved_project_root = project_root.resolve(strict=True)
+    for directory_name in DISPOSABLE_BUILD_DIRECTORIES:
+        directory = resolved_project_root / directory_name
+        if directory.is_dir():
+            shutil.rmtree(directory)
+    for optional_directory_name in (
+        "source-files",
+        "visual-source-files",
+        "failures",
+    ):
+        optional_directory = resolved_project_root / optional_directory_name
+        try:
+            optional_directory.rmdir()
+        except OSError:
+            pass
+
+    if not backup_project_root or not backup_project_root.is_dir():
+        return
+    for build_backup in backup_project_root.glob("build-*"):
+        if build_backup.is_dir():
+            shutil.rmtree(build_backup)
 
 
 def detect_conflicts(
@@ -93,8 +121,6 @@ class ProjectService:
         project_id = str(uuid.uuid4())
         root = self.paths.project(project_id)
         root.mkdir(parents=True)
-        for directory in PROJECT_DIRECTORIES:
-            (root / directory).mkdir()
         now = utc_now()
         manifest = ProjectManifest(
             id=project_id,
@@ -116,6 +142,9 @@ class ProjectService:
             if not path.is_file():
                 continue
             manifest = ProjectManifest.model_validate_json(path.read_text(encoding="utf-8"))
+            last_build_success = None
+            if manifest.build_history:
+                last_build_success = manifest.build_history[-1].success
             summaries.append(
                 ProjectSummary(
                     id=manifest.id,
@@ -125,13 +154,53 @@ class ProjectService:
                     replacement_count=len(manifest.target_assets) + len(manifest.visual_assets),
                     enabled_count=sum(item.enabled for item in manifest.target_assets)
                     + sum(item.enabled for item in manifest.visual_assets),
-                    last_build_success=(
-                        manifest.build_history[-1].success if manifest.build_history else None
-                    ),
+                    last_build_success=last_build_success,
                     game_fingerprint=manifest.game_fingerprint,
                 )
             )
         return summaries
+
+    def clear_exported_build_artifacts(self) -> None:
+        """Migrate successful projects away from the duplicated legacy layout."""
+        for row in self.database.project_rows():
+            manifest_path = Path(row["manifest_path"])
+            if not manifest_path.is_file():
+                continue
+            manifest = ProjectManifest.model_validate_json(
+                manifest_path.read_text(encoding="utf-8")
+            )
+            self._clear_legacy_export_diagnostics(manifest)
+            if not manifest.build_history:
+                continue
+            if not manifest.build_history[-1].success:
+                continue
+            try:
+                clear_project_build_artifacts(
+                    manifest_path.parent,
+                    self.paths.backups / manifest.id,
+                )
+            except OSError:
+                logging.exception(
+                    "Could not clear legacy build artifacts for project %s",
+                    manifest.id,
+                )
+
+    def _clear_legacy_export_diagnostics(
+        self,
+        manifest: ProjectManifest,
+    ) -> None:
+        """Remove reports that older releases placed beside user-facing exports."""
+        for build in manifest.build_history:
+            export_directory = self.paths.exports / manifest.name / build.version
+            for filename in ("checksums.txt", "build-report.json"):
+                legacy_file = export_directory / filename
+                try:
+                    legacy_file.unlink(missing_ok=True)
+                except OSError:
+                    logging.exception(
+                        "Could not remove legacy export report %s",
+                        legacy_file,
+                    )
 
     def load(self, project_id: str) -> ProjectManifest:
         manifest_path = self.paths.project(project_id) / "project.json"
@@ -179,6 +248,10 @@ class ProjectService:
         destination = deleted_root / f"{manifest.id}-{timestamp}"
         shutil.move(str(source), str(destination))
         self.database.delete_project(manifest.id)
+        try:
+            self.paths.projects.rmdir()
+        except OSError:
+            pass
         return destination
 
     def confirm_replacement(
@@ -199,13 +272,17 @@ class ProjectService:
         if looping.enabled:
             from ..csdk.encoding import validate_loop
 
+            duration_seconds = None
+            if metadata.duration_ms:
+                duration_seconds = metadata.duration_ms / 1000
             validate_loop(
                 looping,
-                metadata.duration_ms / 1000 if metadata.duration_ms else None,
+                duration_seconds,
             )
         item_id = str(uuid.uuid4())
         destination_name = f"{item_id}_{source.name}"
         destination = self.paths.project(project_id) / "source-files" / destination_name
+        destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, destination)
         warnings = list(metadata.warnings)
         if asset.channels and metadata.channels and asset.channels != metadata.channels:
@@ -349,12 +426,16 @@ class ProjectService:
         if item.looping.enabled:
             from ..csdk.encoding import validate_loop
 
+            duration_seconds = None
+            if metadata.duration_ms:
+                duration_seconds = metadata.duration_ms / 1000
             validate_loop(
                 item.looping,
-                metadata.duration_ms / 1000 if metadata.duration_ms else None,
+                duration_seconds,
             )
         destination_name = f"{item.id}_{uuid.uuid4().hex[:8]}_{source.name}"
         destination = self.paths.project(project_id) / "source-files" / destination_name
+        destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, destination)
         warnings = list(metadata.warnings)
         if (

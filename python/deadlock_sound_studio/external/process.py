@@ -49,13 +49,18 @@ def run_process(
         raise StudioError("TOOL_MISSING", f"Executable is missing: {executable}")
     started_at = utc_now()
     started = time.monotonic()
-    creation_flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+    creation_flags = 0
+    if os.name == "nt":
+        creation_flags = subprocess.CREATE_NO_WINDOW
+    working_directory = None
+    if cwd:
+        working_directory = str(cwd)
     safe_arguments = sanitize_arguments(arguments)
     logger.info("Starting %s with arguments %s", executable.name, safe_arguments)
     try:
         process = subprocess.Popen(
             [str(executable), *arguments],
-            cwd=str(cwd) if cwd else None,
+            cwd=working_directory,
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -78,7 +83,10 @@ def run_process(
     def drain(stream, chunks: list[str]) -> None:
         if stream is None:
             return
-        while value := stream.read(8192):
+        while True:
+            value = stream.read(8192)
+            if not value:
+                break
             chunks.append(value)
 
     stdout_thread = threading.Thread(
@@ -137,7 +145,9 @@ def run_process(
     stderr = "".join(stderr_chunks)
     duration_ms = round((time.monotonic() - started) * 1000)
     produced = [str(path) for path in expected_files if path.is_file()]
-    exit_code = 0 if output_accepted else process.returncode
+    exit_code = process.returncode
+    if output_accepted:
+        exit_code = 0
     record = ProcessRecord(
         executable_path=str(executable),
         sanitized_arguments=safe_arguments,
@@ -172,4 +182,6 @@ def probe_output(executable: Path, arguments: Sequence[str], timeout: float = 5)
     except (StudioError, OSError):
         return None
     text = (record.stdout or record.stderr).strip()
-    return text.splitlines()[0][:300] if text else None
+    if not text:
+        return None
+    return text.splitlines()[0][:300]

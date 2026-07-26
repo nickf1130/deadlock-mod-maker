@@ -94,14 +94,18 @@ class Database:
         row = self.connection.execute(
             "SELECT * FROM sound_assets WHERE id=?", (asset_id,)
         ).fetchone()
-        return self._asset(row) if row else None
+        if row is None:
+            return None
+        return self._asset(row)
 
     def get_asset_by_path(self, internal_path: str) -> SoundAsset | None:
         row = self.connection.execute(
             "SELECT * FROM sound_assets WHERE internal_path=? COLLATE NOCASE",
             (internal_path,),
         ).fetchone()
-        return self._asset(row) if row else None
+        if row is None:
+            return None
+        return self._asset(row)
 
     def get_assets_by_filename(self, filename: str, limit: int = 250) -> list[SoundAsset]:
         rows = self.connection.execute(
@@ -233,7 +237,9 @@ class Database:
         row = self.connection.execute(
             "SELECT * FROM visual_assets WHERE id=?", (asset_id,)
         ).fetchone()
-        return self._visual_asset(row) if row else None
+        if row is None:
+            return None
+        return self._visual_asset(row)
 
     def get_visual_asset_by_path(
         self, internal_path: str
@@ -242,7 +248,9 @@ class Database:
             "SELECT * FROM visual_assets WHERE internal_path=? COLLATE NOCASE",
             (internal_path,),
         ).fetchone()
-        return self._visual_asset(row) if row else None
+        if row is None:
+            return None
+        return self._visual_asset(row)
 
     def count_visual_assets(self) -> int:
         return int(self.connection.execute("SELECT COUNT(*) FROM visual_assets").fetchone()[0])
@@ -263,7 +271,9 @@ class Database:
             LIMIT 1
             """
         ).fetchone()
-        prior_fingerprint = str(prior[0]) if prior else None
+        prior_fingerprint = None
+        if prior:
+            prior_fingerprint = str(prior[0])
         prior_rows = {
             str(row["id"]): str(row["asset_fingerprint"] or "")
             for row in self.connection.execute(

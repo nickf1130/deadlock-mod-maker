@@ -11,9 +11,14 @@ export function expectedPortableAssetName(version: string): string {
 }
 
 export function normalizeSha256Digest(value: unknown): string | null {
-  if (typeof value !== "string") return null;
+  if (typeof value !== "string") {
+    return null;
+  }
   const match = SHA256_DIGEST.exec(value.trim());
-  return match ? match[1].toLowerCase() : null;
+  if (!match) {
+    return null;
+  }
+  return match[1].toLowerCase();
 }
 
 export function isTrustedReleaseAssetUrl(
@@ -21,7 +26,9 @@ export function isTrustedReleaseAssetUrl(
   version: string,
   assetName: string
 ): value is string {
-  if (typeof value !== "string") return false;
+  if (typeof value !== "string") {
+    return false;
+  }
   try {
     const url = new URL(value);
     if (url.protocol !== "https:" || url.hostname.toLowerCase() !== "github.com") {

@@ -16,7 +16,7 @@ import {
   FileAudio,
   FolderOpen,
   Gauge,
-  Github,
+  GitFork,
   Image as ImageIcon,
   Info,
   Layers3,
@@ -36,6 +36,7 @@ import {
   Wrench,
   X
 } from "lucide-react";
+import appIconUrl from "../../../build/icon.png";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { StatusBadge } from "./components/StatusBadge";
@@ -409,10 +410,10 @@ function App() {
         aria-hidden={bootPhase === "fading"}
       >
         <div className="brand-mark">
-          <AudioLines size={26} />
+          <img src={appIconUrl} alt="" />
         </div>
         <h1>Deadlock Mod Maker</h1>
-        <p>{notice?.text ?? "Preparing your local workspace."}</p>
+        <p>{notice?.text ?? "Preparing your workspace."}</p>
         <ActivityBar active={!notice} label={bootMessage} />
         {notice && <button onClick={() => void loadBootstrap()}>Try again</button>}
       </main>
@@ -433,7 +434,7 @@ function App() {
       <aside className="sidebar">
         <div className="brand">
           <div className="brand-mark">
-            <AudioLines size={21} />
+            <img src={appIconUrl} alt="" />
           </div>
           <div>
             <strong>Deadlock</strong>
@@ -2576,12 +2577,6 @@ function BuildPage({
             </div>
             <StatusBadge status={result.success ? "found" : "invalid"} />
           </div>
-          {result.checksum && (
-            <div className="checksum">
-              <span>SHA-256</span>
-              <code>{result.checksum}</code>
-            </div>
-          )}
           {result.warnings.map((warning) => (
             <p className="warning" key={warning}>{warning}</p>
           ))}
@@ -2607,11 +2602,6 @@ function BuildPage({
             {result.exportDirectory && (
               <button className="primary" onClick={() => void window.studio.openPath(result.exportDirectory!)}>
                 <FolderOpen size={15} /> Open export folder
-              </button>
-            )}
-            {result.reportPath && (
-              <button onClick={() => void window.studio.openPath(result.reportPath!)}>
-                View report
               </button>
             )}
             {result.success && <button disabled={Boolean(exportOperation)} onClick={() => void validate()}>Validate again</button>}
@@ -2641,12 +2631,12 @@ function BuildPage({
         <section className="card item-build-results">
           <div className="section-heading">
             <div>
-              <h3>Per-item build logs</h3>
-              <p>Inspect compiler arguments, exit codes, stdout, and stderr for each replacement.</p>
+              <h3>Build details</h3>
+              <p>Inspect compiler runs for each replacement. A JSON report is saved only when a build fails.</p>
             </div>
             {result.itemLogPath && (
               <button onClick={() => void window.studio.openPath(result.itemLogPath!)}>
-                <FolderOpen size={14} /> Open JSON log
+                <FolderOpen size={14} /> Open failure report
               </button>
             )}
           </div>
@@ -2964,10 +2954,6 @@ function PackageCombinerPage({
             <PackageCheck size={26} />
           </div>
           <code className="package-output-path">{result.outputPath}</code>
-          <div className="checksum">
-            <span>SHA-256</span>
-            <code>{result.sha256}</code>
-          </div>
           <button onClick={() => void window.studio.openPath(result.outputPath)}>
             <FolderOpen size={15} /> Show combined package
           </button>
@@ -3192,7 +3178,7 @@ function AboutPage({
           <h3>Project & social links</h3>
         </div>
         <div className="button-row">
-          <button onClick={() => void open("profile")}><Github size={16} /> Nick on GitHub</button>
+          <button onClick={() => void open("profile")}><GitFork size={16} /> Nick on GitHub</button>
           <button onClick={() => void open("repository")}><ExternalLink size={16} /> Repository</button>
           <button onClick={() => void open("releases")}><PackageOpen size={16} /> Releases</button>
           <button onClick={() => void open("issues")}><CircleAlert size={16} /> Report an issue</button>

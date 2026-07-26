@@ -68,7 +68,10 @@ def _row_settings(
         if raw is None or str(raw).strip() == "":
             continue
         uses_row_settings = True
-        looping[field] = _boolean(raw) if field == "enabled" else float(raw)
+        if field == "enabled":
+            looping[field] = _boolean(raw)
+        else:
+            looping[field] = float(raw)
     return (
         ProcessingSettings.model_validate(processing),
         LoopSettings.model_validate(looping),
@@ -90,12 +93,16 @@ def resolve_mapping_file(
     if path.suffix.lower() == ".csv":
         with path.open("r", encoding="utf-8-sig", newline="") as stream:
             rows = list(csv.DictReader(stream))
-            fieldnames = set(rows[0].keys()) if rows else set()
+            fieldnames = set()
+            if rows:
+                fieldnames = set(rows[0].keys())
     elif path.suffix.lower() == ".xlsx":
         workbook = load_workbook(path, read_only=True, data_only=True)
         sheet = workbook.active
         values = list(sheet.iter_rows(values_only=True))
-        headers = [str(value or "").strip() for value in values[0]] if values else []
+        headers = []
+        if values:
+            headers = [str(value or "").strip() for value in values[0]]
         rows = [
             dict(zip(headers, values_row, strict=False))
             for values_row in values[1:]
@@ -147,11 +154,10 @@ def resolve_mapping_file(
         except Exception as error:
             messages.append(str(error))
         raw_source = Path(replacement)
-        source = (
-            raw_source.resolve(strict=False)
-            if raw_source.is_absolute()
-            else (path.parent / raw_source).resolve(strict=False)
-        )
+        if raw_source.is_absolute():
+            source = raw_source.resolve(strict=False)
+        else:
+            source = (path.parent / raw_source).resolve(strict=False)
         if not raw_source.is_absolute():
             try:
                 source.relative_to(path.parent.resolve())
@@ -163,20 +169,26 @@ def resolve_mapping_file(
             messages.append("Replacement file is missing.")
         if source.suffix.lower() not in {".wav", ".mp3"}:
             messages.append("Replacement must be MP3 or WAV.")
+        asset_id = None
+        if asset:
+            asset_id = asset.id
+        status = "matched"
+        resolved_source = source
+        if messages:
+            status = "invalid"
+            resolved_source = None
         preview = BatchPreviewRow(
             row_number=number,
             original_path=original,
             replacement_file=replacement,
-            asset_id=asset.id if asset else None,
-            status="matched" if not messages else "invalid",
+            asset_id=asset_id,
+            status=status,
             messages=messages,
             processing=processing,
             looping=looping,
             uses_row_settings=uses_row_settings,
         )
-        result.append(
-            (preview, source if preview.status == "matched" else None)
-        )
+        result.append((preview, resolved_source))
     return result
 
 
@@ -195,28 +207,27 @@ def resolve_folder(database: Database, folder: Path) -> list[ResolvedBatchRow]:
     )
     for number, source in enumerate(sources, start=1):
         candidates = database.get_assets_by_filename(f"{source.stem}.vsnd_c")
-        status = (
-            "matched"
-            if len(candidates) == 1
-            else "ambiguous"
-            if candidates
-            else "missingTarget"
-        )
+        status = "missingTarget"
+        original_path = ""
+        asset_id = None
+        messages = ["No filename match."]
+        resolved_source = None
+        if len(candidates) == 1:
+            status = "matched"
+            original_path = candidates[0].internal_path
+            asset_id = candidates[0].id
+            messages = []
+            resolved_source = source
+        elif candidates:
+            status = "ambiguous"
+            messages = [f"{len(candidates)} possible targets."]
         preview = BatchPreviewRow(
             row_number=number,
-            original_path=(
-                candidates[0].internal_path if len(candidates) == 1 else ""
-            ),
+            original_path=original_path,
             replacement_file=str(source.relative_to(root)),
-            asset_id=candidates[0].id if len(candidates) == 1 else None,
+            asset_id=asset_id,
             status=status,
-            messages=(
-                []
-                if len(candidates) == 1
-                else [f"{len(candidates)} possible targets."]
-                if candidates
-                else ["No filename match."]
-            ),
+            messages=messages,
         )
-        rows.append((preview, source if preview.status == "matched" else None))
+        rows.append((preview, resolved_source))
     return rows

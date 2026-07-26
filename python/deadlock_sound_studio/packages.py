@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import os
 import struct
 import uuid
@@ -148,7 +147,6 @@ def combine_packages(
     finally:
         temporary.unlink(missing_ok=True)
 
-    checksum = _sha256(resolved_output)
     _emit(progress, "complete", len(selected), len(selected), "Combined package is ready.")
     return {
         "outputPath": str(resolved_output),
@@ -157,7 +155,6 @@ def combine_packages(
         "conflictCount": len(conflicts),
         "conflicts": conflicts,
         "sizeBytes": resolved_output.stat().st_size,
-        "sha256": checksum,
     }
 
 
@@ -165,8 +162,12 @@ def _build_tree(selected: list[SelectedEntry], offsets: dict[str, int]) -> bytes
     grouped: dict[str, dict[str, list[SelectedEntry]]] = {}
     for value in selected:
         parsed = PurePosixPath(value.entry.path)
-        extension = parsed.suffix[1:] if parsed.suffix else " "
-        directory = parsed.parent.as_posix() if parsed.parent.as_posix() != "." else " "
+        extension = " "
+        if parsed.suffix:
+            extension = parsed.suffix[1:]
+        directory = parsed.parent.as_posix()
+        if directory == ".":
+            directory = " "
         grouped.setdefault(extension, {}).setdefault(directory, []).append(value)
 
     tree = bytearray()
@@ -227,11 +228,3 @@ def _emit(
                 "message": message,
             }
         )
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for block in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()

@@ -242,6 +242,7 @@ class BuildHistoryEntry(StudioModel):
     finished_at: str
     success: bool
     output_relative_path: str | None = None
+    # Kept so projects created by pre-1.0 builds continue to load.
     checksum: str | None = None
     warnings: list[str] = Field(default_factory=list)
 
@@ -337,8 +338,6 @@ class BuildResult(StudioModel):
     conflicts: list[Conflict] = Field(default_factory=list)
     vpk_path: str | None = None
     export_directory: str | None = None
-    checksum: str | None = None
-    report_path: str | None = None
     item_log_path: str | None = None
     guided_fallback_directory: str | None = None
     warnings: list[str] = Field(default_factory=list)
