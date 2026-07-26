@@ -1,0 +1,7 @@
+pydantic>=2.10,<3
+mutagen>=1.47,<2
+openpyxl>=3.1,<4
+Pillow>=11,<13
+pytest>=8.3,<9
+pytest-cov>=6,<7
+pyinstaller>=6.11,<7

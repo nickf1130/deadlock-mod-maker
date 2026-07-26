@@ -1,0 +1,1 @@
+"""Isolated external-tool adapters."""

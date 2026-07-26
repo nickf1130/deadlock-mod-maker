@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "id": "example-multi-sound-do-not-build",
+  "name": "example_multi_sound_pack",
+  "displayName": "Example Multi-Sound Pack",
+  "description": "Illustrates targets from multiple categories. Source copies are intentionally omitted.",
+  "author": "",
+  "createdAt": "2026-07-24T00:00:00Z",
+  "updatedAt": "2026-07-24T00:00:00Z",
+  "gameFingerprint": "example-only",
+  "packageMode": "single-vpk",
+  "targetAssets": [
+    {
+      "id": "example-one",
+      "order": 0,
+      "enabled": true,
+      "target": {
+        "id": "asset-one",
+        "internalPath": "sounds/vo/hero_one/ability_cast.vsnd_c",
+        "compiledPath": "sounds/vo/hero_one/ability_cast.vsnd_c",
+        "filename": "ability_cast.vsnd_c",
+        "extension": ".vsnd_c",
+        "category": "ability",
+        "heroId": "hero_one",
+        "heroName": "Hero One",
+        "abilityName": "Ability Cast",
+        "soundEvent": null,
+        "durationMs": null,
+        "sampleRate": null,
+        "channels": null,
+        "sourceArchive": "redacted/pak01_dir.vpk",
+        "archiveFingerprint": "example-only",
+        "assetFingerprint": null,
+        "lastIndexedAt": "2026-07-24T00:00:00Z"
+      },
+      "sourceFilename": "ability_cast.wav",
+      "sourceRelativePath": "source-files/example-one_ability_cast.wav",
+      "processedRelativePath": null,
+      "sourceMetadata": {
+        "durationMs": null,
+        "sampleRate": null,
+        "channels": null,
+        "codec": null,
+        "peakDb": null,
+        "integratedLoudness": null,
+        "previewPath": null,
+        "warnings": []
+      },
+      "processing": {
+        "trimStartSeconds": 0,
+        "trimEndSeconds": null,
+        "autoTrimSilence": false,
+        "fadeInSeconds": 0,
+        "fadeOutSeconds": 0,
+        "gainDb": 0,
+        "normalize": true,
+        "targetLoudnessLufs": -16,
+        "peakHeadroomDb": -1,
+        "channels": null,
+        "sampleRate": 44100
+      },
+      "looping": {
+        "enabled": false,
+        "startSeconds": null,
+        "endSeconds": null,
+        "startSample": null,
+        "endSample": null
+      },
+      "status": "confirmed",
+      "validationMessages": [],
+      "lastError": null
+    }
+  ],
+  "buildSettings": {},
+  "buildHistory": [],
+  "exportHistory": []
+}

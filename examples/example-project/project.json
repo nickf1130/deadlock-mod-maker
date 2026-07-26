@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "example-project-do-not-build",
+  "name": "example_sound_pack",
+  "displayName": "Example Sound Pack",
+  "description": "Documentation-only project manifest.",
+  "author": "",
+  "createdAt": "2026-07-24T00:00:00Z",
+  "updatedAt": "2026-07-24T00:00:00Z",
+  "gameFingerprint": "",
+  "packageMode": "single-vpk",
+  "targetAssets": [],
+  "buildSettings": {},
+  "buildHistory": [],
+  "exportHistory": []
+}

@@ -1,0 +1,71 @@
+# Dependencies and build output
+node_modules/
+dist/
+dist-electron/
+release/
+.vite/
+coverage/
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+python/build/
+python/dist/
+
+# /build is electron-builder's buildResources directory and holds the app icon,
+# which must be committed. Only ignore stray build output inside it.
+/build/*
+!/build/icon.png
+!/build/icon.ico
+!/build/installerIcon.ico
+
+# Application runtime folders. These are created next to the executable (or at
+# the repo root in development) and hold the local index, your projects, and
+# your exports. data/settings.json records absolute paths to your own CSDK,
+# Deadlock and FFmpeg installs, so none of this belongs in the repository.
+/data/
+/cache/
+/projects/
+/exports/
+/logs/
+/backups/
+/tools/
+/.tool-probe/
+
+# The same folders again, created when the Python worker runs with python/ as
+# its working directory. The leading-slash rules above do not match these.
+python/data/
+python/cache/
+python/projects/
+python/exports/
+python/logs/
+python/backups/
+python/tools/
+python/.tool-probe/
+
+# Internal design notes. Delete this line to publish them; see README.
+/docs/
+
+# Game archives and mod output. Never commit Valve content.
+*.vpk
+*.pak
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+
+# Editors and OS
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+desktop.ini

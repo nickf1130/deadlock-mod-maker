@@ -1,0 +1,2 @@
+original_path,replacement_file,hero,category,trim_start_seconds,trim_end_seconds,normalize,gain_db,fade_in_seconds,fade_out_seconds,loop_enabled,loop_start_seconds,loop_end_seconds,notes
+sounds/vo/example/ability_cast.vsnd_c,audio/ability_cast.wav,example,ability,0,,true,0,0,0,false,,,Replace with a path relative to this CSV

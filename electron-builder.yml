@@ -1,0 +1,26 @@
+appId: app.deadlockmodmaker.desktop
+productName: Deadlock Mod Maker
+asar: true
+directories:
+  output: release
+files:
+  - dist/**
+  - dist-electron/**
+  - package.json
+extraResources:
+  - from: python/dist/deadlock-sound-worker
+    to: backend/deadlock-sound-worker
+    filter:
+      - "**/*"
+win:
+  # electron-builder generates the multi-resolution .ico from this source.
+  icon: build/icon.png
+  target:
+    - target: portable
+      arch:
+        - x64
+  artifactName: DeadlockModMaker-${version}-portable.${ext}
+  requestedExecutionLevel: asInvoker
+portable:
+  artifactName: DeadlockModMaker-${version}-portable.${ext}
+publish: null

@@ -1,0 +1,51 @@
+{
+  "name": "deadlock-sound-studio",
+  "productName": "Deadlock Mod Maker",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Build validated VPK mods for Valve Deadlock",
+  "license": "GPL-3.0-or-later",
+  "author": "Deadlock Mod Maker contributors",
+  "type": "module",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "dev": "concurrently -k \"vite --host 127.0.0.1\" \"npm:dev:electron\"",
+    "dev:electron": "wait-on tcp:1420 && tsc -p apps/electron/tsconfig.json && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:1420 electron .",
+    "build": "npm run build:renderer && npm run build:electron && npm run verify:electron",
+    "build:renderer": "vite build",
+    "build:electron": "tsc -p apps/electron/tsconfig.json",
+    "verify:electron": "node scripts/verify-electron-build.mjs",
+    "build:python": "python -m PyInstaller python/deadlock-sound-worker.spec --noconfirm --clean --distpath python/dist --workpath python/build",
+    "dist": "npm run build && npm run build:python && electron-builder --config electron-builder.yml",
+    "test": "vitest run",
+    "test:python": "python -m pytest python/tests",
+    "test:e2e": "npm run build && playwright test",
+    "test:all": "npm run test && npm run test:python && npm run test:e2e",
+    "typecheck": "tsc --noEmit && tsc -p apps/electron/tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "electron-log": "^5.2.4",
+    "lucide-react": "^0.468.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "wavesurfer.js": "^7.8.12"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.0",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.1.0",
+    "@types/node": "^22.10.5",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^6.0.4",
+    "concurrently": "^9.1.2",
+    "cross-env": "^7.0.3",
+    "electron": "^43.2.0",
+    "electron-builder": "^22.14.13",
+    "jsdom": "^29.1.1",
+    "typescript": "~5.7.2",
+    "vite": "^8.1.5",
+    "vitest": "^4.1.10",
+    "wait-on": "^8.0.1"
+  }
+}
