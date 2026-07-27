@@ -22,12 +22,15 @@ import {
   Layers3,
   ListMusic,
   Merge,
+  Minus,
   PackageCheck,
   PackageOpen,
+  PackageSearch,
   Plus,
   RefreshCw,
   Search,
   Settings2,
+  ShieldAlert,
   ShieldCheck,
   Tag,
   Trash2,
@@ -43,6 +46,8 @@ import { StatusBadge } from "./components/StatusBadge";
 import { SoundTutorial } from "./components/SoundTutorial";
 import { WaveformPlayer } from "./components/WaveformPlayer";
 import type {
+  AddonConflictReport,
+  ModPackageReport,
   AudioMetadata,
   AppInfo,
   Bootstrap,
@@ -78,6 +83,7 @@ type View =
   | "visuals"
   | "projects"
   | "packages"
+  | "installed"
   | "diagnostics"
   | "about";
 
@@ -87,6 +93,7 @@ const NAV_ITEMS: Array<{ id: View; label: string; icon: typeof AudioLines }> = [
   { id: "visuals", label: "Visuals (WIP)", icon: ImageIcon },
   { id: "projects", label: "Projects", icon: Layers3 },
   { id: "packages", label: "PAK Combiner", icon: Merge },
+  { id: "installed", label: "Installed Mods", icon: PackageSearch },
   { id: "diagnostics", label: "Diagnostics", icon: Activity },
   { id: "about", label: "About", icon: Info }
 ];
@@ -483,6 +490,8 @@ function App() {
                 ? `${activeProject.displayName} · ${activeProject.targetAssets.length + activeProject.visualAssets.length} replacement${activeProject.targetAssets.length + activeProject.visualAssets.length === 1 ? "" : "s"}`
                 : view === "packages"
                   ? "Inspect and combine Valve package files"
+                : view === "installed"
+                  ? "Check mods already in your game folder"
                 : "No active project"}
             </p>
           </div>
@@ -592,6 +601,14 @@ function App() {
               progress={packageProgress}
               onProgressReset={() => setPackageProgress(null)}
               onNotice={setNotice}
+            />
+          )}
+          {view === "installed" && (
+            <InstalledModsPage
+              onNavigate={setView}
+              onProjectCreated={() => void loadBootstrap()}
+              onNotice={setNotice}
+              onInfoNotice={setInfoNotice}
             />
           )}
           {view === "diagnostics" && (
@@ -2669,6 +2686,288 @@ function BuildPage({
           </div>
         </section>
       ) : null}
+    </div>
+  );
+}
+
+// "17 others" reads badly, and "other" covers several real resource types.
+function describeKindCount(kind: string, count: number): string {
+  if (kind === "other") return `${count} other file${count === 1 ? "" : "s"}`;
+  return `${count} ${kind}${count === 1 ? "" : "s"}`;
+}
+
+// Reads mod packages that already exist: the ones installed in the game folder,
+// and any single .vpk the user wants to look at before installing it.
+// Backend: python/deadlock_sound_studio/mods/
+function InstalledModsPage({
+  onNavigate,
+  onProjectCreated,
+  onNotice,
+  onInfoNotice
+}: {
+  onNavigate: (view: View) => void;
+  onProjectCreated: () => void;
+  onNotice: (message: string | null) => void;
+  onInfoNotice: (message: string | null) => void;
+}) {
+  const [conflicts, setConflicts] = useState<AddonConflictReport | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const [report, setReport] = useState<ModPackageReport | null>(null);
+  const [inspecting, setInspecting] = useState(false);
+  const [creating, setCreating] = useState(false);
+
+  async function scanAddons() {
+    setScanning(true);
+    try {
+      // No directory argument: the backend derives it from the Deadlock folder
+      // already chosen in Diagnostics.
+      setConflicts(await window.studio.backend<AddonConflictReport>("mods.addonConflicts"));
+    } catch (error) {
+      onNotice(errorMessage(error));
+    } finally {
+      setScanning(false);
+    }
+  }
+
+  async function inspectPackage() {
+    const selected = await window.studio.selectPackages();
+    if (!selected.length) return;
+    setInspecting(true);
+    try {
+      setReport(
+        await window.studio.backend<ModPackageReport>("mods.inspect", { path: selected[0] })
+      );
+    } catch (error) {
+      onNotice(errorMessage(error));
+    } finally {
+      setInspecting(false);
+    }
+  }
+
+  // A mod's VPK holds compiled output, so the original audio and images cannot
+  // be recovered from it. What we can do is start a project named after the mod
+  // and list the paths it replaced, ready for the user's own source files.
+  async function createProjectFromReport() {
+    if (!report) return;
+    setCreating(true);
+    try {
+      await window.studio.backend<ProjectManifest>("projects.create", {
+        displayName: report.suggestedProjectName,
+        description: `Targets taken from ${report.filename}.`
+      });
+      onProjectCreated();
+      onInfoNotice(
+        `Created "${report.suggestedProjectName}". Add your own replacement files for the ${report.matchedCount} target${report.matchedCount === 1 ? "" : "s"} listed here.`
+      );
+      onNavigate("projects");
+    } catch (error) {
+      onNotice(errorMessage(error));
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  return (
+    <div className="page-stack installed-mods-page">
+      <PageHeading
+        title="Installed mods"
+        description="Check the mods already in your game folder, and look inside a mod file before you trust it."
+        actions={
+          <>
+            <button disabled={inspecting} onClick={() => void inspectPackage()}>
+              <FileArchive size={15} /> Inspect a mod file
+            </button>
+            <button className="primary" disabled={scanning} onClick={() => void scanAddons()}>
+              <RefreshCw size={15} className={scanning ? "spin" : ""} /> Scan addons folder
+            </button>
+          </>
+        }
+      />
+
+      <section className="card installed-scan">
+        <div className="section-heading">
+          <div>
+            <h3>Conflicts between installed mods</h3>
+            <p>
+              Two mods that replace the same file cannot both apply. One silently loses, which
+              is usually why an installed mod appears to do nothing.
+            </p>
+          </div>
+        </div>
+
+        {!conflicts && !scanning && (
+          <div className="empty compact">
+            <PackageSearch size={22} />
+            <strong>Nothing scanned yet</strong>
+            <span>Scan the addons folder to compare every installed mod.</span>
+          </div>
+        )}
+
+        {conflicts && (
+          <>
+            <div className="build-summary">
+              <Metadata label="Installed mods" value={conflicts.packageCount.toString()} />
+              <Metadata label="Conflicts" value={conflicts.conflictCount.toString()} />
+              <Metadata label="Mods affected" value={conflicts.conflictingFilenames.length.toString()} />
+              <Metadata label="Unreadable" value={conflicts.unreadableCount.toString()} />
+            </div>
+            <code className="installed-directory">{conflicts.directory}</code>
+
+            {conflicts.conflictCount === 0 ? (
+              <div className="empty compact">
+                <Check size={22} />
+                <strong>No conflicts found</strong>
+                <span>
+                  {conflicts.packageCount} installed mod
+                  {conflicts.packageCount === 1 ? "" : "s"} replace different files.
+                </span>
+              </div>
+            ) : (
+              <>
+                <p className="installed-hint">
+                  <ShieldAlert size={13} /> Which mod wins depends on the game's addon load
+                  order, so this does not predict a winner. Removing one of each pair is the
+                  reliable fix.
+                </p>
+                <ul className="installed-conflict-list">
+                  {conflicts.conflicts.slice(0, 100).map((conflict) => (
+                    <li key={conflict.path}>
+                      <code>{conflict.path}</code>
+                      <span>
+                        {conflict.filenames.map((filename) => (
+                          <em key={filename}>{filename}</em>
+                        ))}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                {conflicts.conflictCount > 100 && (
+                  <p className="overview-more">
+                    and {conflicts.conflictCount - 100} more conflicting path
+                    {conflicts.conflictCount - 100 === 1 ? "" : "s"}
+                  </p>
+                )}
+              </>
+            )}
+
+            {conflicts.unreadableCount > 0 && (
+              <ul className="installed-conflict-list unreadable">
+                {conflicts.packages
+                  .filter((installed) => installed.error)
+                  .map((installed) => (
+                    <li key={installed.path}>
+                      <code>{installed.filename}</code>
+                      <span>
+                        <em>{installed.error}</em>
+                      </span>
+                    </li>
+                  ))}
+              </ul>
+            )}
+          </>
+        )}
+      </section>
+
+      <section className="card installed-inspect">
+        <div className="section-heading">
+          <div>
+            <h3>Inspect a mod file</h3>
+            <p>
+              See which game files a downloaded <code>.vpk</code> replaces, and whether those
+              files still exist in the current build of Deadlock.
+            </p>
+          </div>
+          {report && (
+            <button
+              disabled={creating || report.matchedCount === 0}
+              title={
+                report.matchedCount === 0
+                  ? "A project needs targets this app can edit: sounds, textures or materials"
+                  : "Start a project named after this mod"
+              }
+              onClick={() => void createProjectFromReport()}
+            >
+              <Plus size={15} /> Create project from this mod
+            </button>
+          )}
+        </div>
+
+        {!report && !inspecting && (
+          <div className="empty compact">
+            <FileArchive size={22} />
+            <strong>No mod file selected</strong>
+            <span>Choose a .vpk or .pak to see what it changes.</span>
+          </div>
+        )}
+
+        {report && (
+          <>
+            {!report.indexed && (
+              <p className="installed-hint warning-hint">
+                <CircleAlert size={13} /> The game archive has not been indexed yet, so every
+                entry below looks unmatched. Index it from Sounds first.
+              </p>
+            )}
+            <div className="build-summary">
+              <Metadata label="Entries" value={report.entryCount.toString()} />
+              <Metadata label="Match the game" value={report.matchedCount.toString()} />
+              <Metadata label="Not in the game" value={report.missingCount.toString()} />
+              <Metadata label="Not checkable" value={report.uncheckedCount.toString()} />
+            </div>
+            <code className="installed-directory">{report.path}</code>
+
+            {report.missingCount > 0 && report.indexed && (
+              <p className="installed-hint warning-hint">
+                <ShieldAlert size={13} /> {report.missingCount} entr
+                {report.missingCount === 1 ? "y replaces a file" : "ies replace files"} the game
+                no longer ships. Those replacements will not apply — usually a sign the mod
+                predates a game update.
+              </p>
+            )}
+            {report.uncheckedCount > 0 && (
+              <p className="installed-hint">
+                <Info size={13} /> {report.uncheckedCount} entr
+                {report.uncheckedCount === 1 ? "y is" : "ies are"} a resource type this app does
+                not index yet, such as Panorama UI or models. They are listed below but cannot be
+                checked against the game — this is not a sign the mod is broken.
+              </p>
+            )}
+
+            <div className="installed-kinds">
+              {Object.entries(report.countsByKind).map(([kind, count]) => (
+                <span key={kind}>{describeKindCount(kind, count)}</span>
+              ))}
+              {report.heroes.map((hero) => (
+                <span key={hero} className="hero">
+                  {hero}
+                </span>
+              ))}
+            </div>
+
+            <ul className="installed-entry-list">
+              {report.entries.slice(0, 200).map((entry) => (
+                <li key={entry.path} className={entry.status}>
+                  {entry.status === "unchecked" ? (
+                    // Not a failure, so it must not borrow the red cross that
+                    // StatusBadge gives every non-positive status.
+                    <span className="status status-unchecked" title="Not checked">
+                      <Minus size={15} strokeWidth={2.4} aria-hidden="true" />
+                    </span>
+                  ) : (
+                    <StatusBadge status={entry.status === "matched" ? "found" : "missing"} />
+                  )}
+                  <code>{entry.path}</code>
+                  <span>{entry.kind}</span>
+                  <span>{formatBytes(entry.sizeBytes)}</span>
+                </li>
+              ))}
+            </ul>
+            {report.entryCount > 200 && (
+              <p className="overview-more">and {report.entryCount - 200} more entries</p>
+            )}
+          </>
+        )}
+      </section>
     </div>
   );
 }

@@ -19,6 +19,7 @@ from ..diagnostics import run_diagnostics
 from ..errors import StudioError, capability_error
 from ..external.process import CancellationToken
 from ..indexing import index_archive
+from ..mods import find_addon_conflicts, inspect_mod_package
 from ..models import (
     LoopSettings,
     ProcessingSettings,
@@ -178,6 +179,16 @@ class CombinePackagesParams(PackagePathsParams):
     output_path: str = Field(alias="outputPath")
 
 
+class ModPackageParams(ParamsModel):
+    path: str
+
+
+class AddonConflictParams(ParamsModel):
+    # Omitted by the UI in the normal case, where the addons folder is derived
+    # from the Deadlock installation the user already selected in Diagnostics.
+    directory: str | None = None
+
+
 class BackendRouter:
     def __init__(self, paths: AppPaths, emit_event):
         self.paths = paths
@@ -226,6 +237,8 @@ class BackendRouter:
             "export.createCompatibilityCopy": self.create_compatibility_copy,
             "packages.inspect": self.inspect_packages,
             "packages.combine": self.combine_packages,
+            "mods.inspect": self.inspect_mod,
+            "mods.addonConflicts": self.addon_conflicts,
         }
 
     def close(self) -> None:
@@ -791,3 +804,31 @@ class BackendRouter:
             Path(params.output_path),
             self.emit_event,
         )
+
+    def inspect_mod(self, raw: dict[str, Any]) -> dict[str, object]:
+        """Describe an existing mod package against the indexed game files."""
+        params = ModPackageParams.model_validate(raw)
+        report = inspect_mod_package(Path(params.path), self.database)
+        payload = report.as_payload()
+        # Without an index every path looks orphaned, which would read as "this
+        # mod is broken". Say so explicitly instead.
+        payload["indexed"] = self.database.count_assets() > 0
+        return payload
+
+    def addon_conflicts(self, raw: dict[str, Any]) -> dict[str, object]:
+        """Report installed mods that claim the same game path."""
+        params = AddonConflictParams.model_validate(raw)
+        directory = (
+            Path(params.directory) if params.directory else self._default_addons_directory()
+        )
+        return find_addon_conflicts(directory).as_payload()
+
+    def _default_addons_directory(self) -> Path:
+        """``<deadlock>/game/citadel/addons``, where Source 2 loads mods from."""
+        deadlock_root = self._diagnostics().resolved.deadlock_root
+        if not deadlock_root:
+            raise capability_error(
+                "Choose your Deadlock installation in Diagnostics before checking "
+                "installed mods."
+            )
+        return Path(deadlock_root) / "game" / "citadel" / "addons"

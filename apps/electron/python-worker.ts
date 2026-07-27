@@ -46,7 +46,9 @@ export type BackendMethod =
   | "export.createZip"
   | "export.createCompatibilityCopy"
   | "packages.inspect"
-  | "packages.combine";
+  | "packages.combine"
+  | "mods.inspect"
+  | "mods.addonConflicts";
 
 export const BACKEND_ALLOWLIST = new Set<BackendMethod>([
   "app.bootstrap",
@@ -88,7 +90,9 @@ export const BACKEND_ALLOWLIST = new Set<BackendMethod>([
   "export.createZip",
   "export.createCompatibilityCopy",
   "packages.inspect",
-  "packages.combine"
+  "packages.combine",
+  "mods.inspect",
+  "mods.addonConflicts"
 ]);
 
 const LONG_RUNNING_METHODS = new Set<BackendMethod>([

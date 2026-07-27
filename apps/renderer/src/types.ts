@@ -431,3 +431,73 @@ export const DEFAULT_LOOP: LoopSettings = {
   startSample: null,
   endSample: null
 };
+
+/**
+ * Reading mod packages that already exist, rather than building new ones.
+ * Backend: python/deadlock_sound_studio/mods/
+ */
+
+/** One file inside a downloaded mod, described against the indexed game archive. */
+export type ModEntry = {
+  path: string;
+  /** "sound" | "texture" | "material" | "other" — see KIND_BY_EXTENSION in inspection.py. */
+  kind: string;
+  sizeBytes: number;
+  /**
+   * "matched"   - the game ships this path, so the replacement will apply.
+   * "missing"   - an indexed kind, but the path is not in the catalog.
+   * "unchecked" - a kind this app does not index (Panorama UI, models), so
+   *               nothing can be said either way.
+   */
+  status: "matched" | "missing" | "unchecked";
+  heroName: string | null;
+};
+
+/** Result of `mods.inspect`. */
+export type ModPackageReport = {
+  path: string;
+  filename: string;
+  sizeBytes: number;
+  entryCount: number;
+  matchedCount: number;
+  missingCount: number;
+  uncheckedCount: number;
+  /** Entry count per kind, e.g. { sound: 12, texture: 3 }. */
+  countsByKind: Record<string, number>;
+  heroes: string[];
+  /** "abrams_voice_pack.vpk" -> "Abrams Voice Pack"; pass to projects.create. */
+  suggestedProjectName: string;
+  /** False when the archive has never been indexed, so every entry looks orphaned. */
+  indexed: boolean;
+  entries: ModEntry[];
+};
+
+/** One installed mod file found in the addons folder. */
+export type InstalledPackage = {
+  path: string;
+  filename: string;
+  entryCount: number;
+  sizeBytes: number;
+  /** Set when the package could not be read; it is reported rather than skipped. */
+  error: string | null;
+};
+
+/** One game path claimed by more than one installed mod. */
+export type AddonConflict = {
+  path: string;
+  filenames: string[];
+};
+
+/**
+ * Result of `mods.addonConflicts`. Reports *that* mods collide, not which one
+ * wins — that depends on the game's addon load order, which is not predicted here.
+ */
+export type AddonConflictReport = {
+  directory: string;
+  packageCount: number;
+  conflictCount: number;
+  conflictingFilenames: string[];
+  unreadableCount: number;
+  packages: InstalledPackage[];
+  conflicts: AddonConflict[];
+};

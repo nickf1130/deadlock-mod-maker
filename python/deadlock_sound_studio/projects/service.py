@@ -118,6 +118,15 @@ class ProjectService:
         self, display_name: str, description: str = "", author: str = ""
     ) -> ProjectManifest:
         name = normalize_addon_name(display_name)
+        # The database enforces unique addon names. Checking first turns a raw
+        # sqlite IntegrityError into something the user can act on, and avoids
+        # leaving an empty project folder behind when the insert fails.
+        if any(row["name"] == name for row in self.database.project_rows()):
+            raise StudioError(
+                "PROJECT_NAME_TAKEN",
+                f'A project named "{name}" already exists. Choose a different name.',
+                {"name": name},
+            )
         project_id = str(uuid.uuid4())
         root = self.paths.project(project_id)
         root.mkdir(parents=True)
