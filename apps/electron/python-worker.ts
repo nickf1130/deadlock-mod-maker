@@ -48,7 +48,8 @@ export type BackendMethod =
   | "packages.inspect"
   | "packages.combine"
   | "mods.inspect"
-  | "mods.addonConflicts";
+  | "mods.addonConflicts"
+  | "mods.compare";
 
 export const BACKEND_ALLOWLIST = new Set<BackendMethod>([
   "app.bootstrap",
@@ -92,7 +93,8 @@ export const BACKEND_ALLOWLIST = new Set<BackendMethod>([
   "packages.inspect",
   "packages.combine",
   "mods.inspect",
-  "mods.addonConflicts"
+  "mods.addonConflicts",
+  "mods.compare"
 ]);
 
 const LONG_RUNNING_METHODS = new Set<BackendMethod>([

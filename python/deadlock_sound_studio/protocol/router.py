@@ -19,14 +19,14 @@ from ..diagnostics import run_diagnostics
 from ..errors import StudioError, capability_error
 from ..external.process import CancellationToken
 from ..indexing import index_archive
-from ..mods import find_addon_conflicts, inspect_mod_package
+from ..mods import compare_mod_packages, find_addon_conflicts, inspect_mod_package
 from ..models import (
     LoopSettings,
     ProcessingSettings,
     Settings,
     VisualResourceKind,
 )
-from ..packages import combine_packages, inspect_packages
+from ..packages import RenameRule, combine_packages, inspect_packages
 from ..paths import AppPaths
 from ..projects import ProjectService, detect_conflicts
 from ..requirements import install_missing_requirements
@@ -175,12 +175,25 @@ class PackagePathsParams(ParamsModel):
     paths: list[str] = Field(min_length=1, max_length=50)
 
 
+class RenameRuleParams(ParamsModel):
+    package: str
+    source: str
+    target: str
+
+
 class CombinePackagesParams(PackagePathsParams):
     output_path: str = Field(alias="outputPath")
+    # Optional redirects, used when two mods supply the same thing at
+    # different paths. See packages.RenameRule.
+    renames: list[RenameRuleParams] = Field(default_factory=list)
 
 
 class ModPackageParams(ParamsModel):
     path: str
+
+
+class CompareModsParams(ParamsModel):
+    paths: list[str] = Field(min_length=2, max_length=10)
 
 
 class AddonConflictParams(ParamsModel):
@@ -239,6 +252,7 @@ class BackendRouter:
             "packages.combine": self.combine_packages,
             "mods.inspect": self.inspect_mod,
             "mods.addonConflicts": self.addon_conflicts,
+            "mods.compare": self.compare_mods,
         }
 
     def close(self) -> None:
@@ -803,6 +817,10 @@ class BackendRouter:
             [Path(value) for value in params.paths],
             Path(params.output_path),
             self.emit_event,
+            [
+                RenameRule(package=rule.package, source=rule.source, target=rule.target)
+                for rule in params.renames
+            ],
         )
 
     def inspect_mod(self, raw: dict[str, Any]) -> dict[str, object]:
@@ -814,6 +832,11 @@ class BackendRouter:
         # mod is broken". Say so explicitly instead.
         payload["indexed"] = self.database.count_assets() > 0
         return payload
+
+    def compare_mods(self, raw: dict[str, Any]) -> dict[str, object]:
+        """Report what two mod packages have in common."""
+        params = CompareModsParams.model_validate(raw)
+        return compare_mod_packages([Path(value) for value in params.paths]).as_payload()
 
     def addon_conflicts(self, raw: dict[str, Any]) -> dict[str, object]:
         """Report installed mods that claim the same game path."""

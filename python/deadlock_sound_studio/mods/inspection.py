@@ -34,8 +34,16 @@ KIND_BY_EXTENSION = {
     ".vsnd_c": "sound",
     ".vtex_c": "texture",
     ".vmat_c": "material",
+    ".vmdl_c": "model",
+    ".vpcf_c": "particle",
 }
 UNKNOWN_KIND = "other"
+
+# Kinds where one file holds several things a player thinks of separately. A
+# Deadlock hero and the weapon they carry share a single .vmdl_c, so two mods
+# that both replace it cannot be merged by picking files: whichever wins brings
+# its whole mesh. Only 4 of the game's 152 hero models ship a separate weapon.
+INSEPARABLE_KINDS = frozenset({"model"})
 
 # Only these kinds reach the catalog, so only these can be checked against it.
 # A Panorama or model path is absent from the index because the indexer skips

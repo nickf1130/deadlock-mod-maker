@@ -8,7 +8,8 @@ from typing import Any
 import pytest
 
 from conftest import write_vpk
-from deadlock_sound_studio.packages import combine_packages, inspect_packages
+from deadlock_sound_studio.errors import StudioError
+from deadlock_sound_studio.packages import RenameRule, combine_packages, inspect_packages
 from deadlock_sound_studio.models import Settings
 from deadlock_sound_studio.paths import AppPaths
 from deadlock_sound_studio import requirements
@@ -330,3 +331,89 @@ def test_requirement_installer_places_and_verifies_all_downloadable_tools(
     assert (paths.tools / "ffmpeg/ffprobe.exe").is_file()
     assert (paths.tools / "ffmpeg/avcodec.dll").is_file()
     assert events[-1]["stage"] == "complete"
+
+
+# --- rename on merge --------------------------------------------------------
+
+
+def test_rename_writes_an_entry_at_a_different_path(tmp_path: Path):
+    """Two mods can supply the same thing at different paths; a redirect lets
+    the retexture land where the model that should use it actually reads."""
+    model_mod = write_vpk(
+        tmp_path / "model.vpk",
+        {
+            "models/hornet/hornet.vmdl_c": b"mesh",
+            "models/hornet/materials/body.vmat_c": b"model-body",
+        },
+    )
+    retexture = write_vpk(
+        tmp_path / "skin.vpk",
+        {"models/vindicta/materials/body.vmat_c": b"skin-body"},
+    )
+
+    output = tmp_path / "merged.vpk"
+    result = combine_packages(
+        [model_mod, retexture],
+        output,
+        None,
+        [
+            RenameRule(
+                package="skin.vpk",
+                source="models/vindicta/materials/body.vmat_c",
+                target="models/hornet/materials/body.vmat_c",
+            )
+        ],
+    )
+
+    assert result["renamedCount"] == 1
+    entries = {entry.path: entry for entry in list_vpk(output)}
+    # The redirected file replaced the model mod's own material...
+    assert set(entries) == {
+        "models/hornet/hornet.vmdl_c",
+        "models/hornet/materials/body.vmat_c",
+    }
+    assert read_vpk_entry(output, entries["models/hornet/materials/body.vmat_c"]) == b"skin-body"
+    # ...and the original path is gone: a rename moves, it does not duplicate.
+    assert "models/vindicta/materials/body.vmat_c" not in entries
+
+
+def test_a_renamed_entry_takes_part_in_precedence(tmp_path: Path):
+    """Order still decides: the redirect only wins because it comes last."""
+    first = write_vpk(tmp_path / "first.vpk", {"target.vsnd_c": b"first"})
+    second = write_vpk(tmp_path / "second.vpk", {"source.vsnd_c": b"second"})
+
+    output = tmp_path / "merged.vpk"
+    result = combine_packages(
+        [first, second],
+        output,
+        None,
+        [RenameRule(package="second.vpk", source="source.vsnd_c", target="target.vsnd_c")],
+    )
+
+    assert result["conflictCount"] == 1
+    entries = {entry.path: entry for entry in list_vpk(output)}
+    assert read_vpk_entry(output, entries["target.vsnd_c"]) == b"second"
+
+
+def test_rename_rules_that_cannot_apply_are_rejected(tmp_path: Path):
+    package = write_vpk(tmp_path / "a.vpk", {"real.vsnd_c": b"a"})
+    other = write_vpk(tmp_path / "b.vpk", {"other.vsnd_c": b"b"})
+    output = tmp_path / "merged.vpk"
+
+    with pytest.raises(StudioError) as missing_file:
+        combine_packages(
+            [package, other],
+            output,
+            None,
+            [RenameRule(package="a.vpk", source="absent.vsnd_c", target="x.vsnd_c")],
+        )
+    assert "not in that package" in missing_file.value.message
+
+    with pytest.raises(StudioError) as missing_package:
+        combine_packages(
+            [package, other],
+            output,
+            None,
+            [RenameRule(package="nope.vpk", source="real.vsnd_c", target="x.vsnd_c")],
+        )
+    assert "not being combined" in missing_package.value.message

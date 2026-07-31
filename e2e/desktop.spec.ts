@@ -168,7 +168,7 @@ test("desktop shell exposes the consolidated roadmap workflow", async ({}, testI
       "Sounds",
       "Visuals (WIP)",
       "Projects",
-      "PAK Combiner",
+      "Utilities",
       "Diagnostics",
       "About"
     ]);
@@ -189,8 +189,15 @@ test("desktop shell exposes the consolidated roadmap workflow", async ({}, testI
     expect(workspaceBackground).toBe("none");
     expect(overviewBackground).toBe("none");
 
-    await page.getByRole("button", { name: "PAK Combiner", exact: true }).click();
-    await expect(page.getByRole("heading", { name: "PAK Combiner", exact: true })).toBeVisible();
+    // The package tools live behind the Utilities nav entry, each on its own tab.
+    await page.getByRole("button", { name: "Utilities", exact: true }).click();
+    await expect(page.locator(".utility-tabs button")).toHaveText([
+      "PAK Combiner",
+      "Installed Mods",
+      "Inspect a Mod",
+      "Compare Mods"
+    ]);
+    await page.locator(".utility-tabs button", { hasText: "PAK Combiner" }).click();
     await expect(
       page.getByRole("heading", { name: "Inspect and combine PAK files", exact: true })
     ).toBeVisible();

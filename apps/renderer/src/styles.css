@@ -3302,3 +3302,268 @@ input[type="radio"] {
   justify-content: center;
   color: #525252;
 }
+
+/* Conflicts grouped by the mods involved, rather than a flat list of paths. */
+
+.installed-mod-conflicts {
+  display: grid;
+  gap: 8px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.installed-mod-conflicts > li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px 14px;
+  padding: 12px 14px;
+  background: #111111;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+}
+
+.installed-mod-pair {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+}
+
+.installed-mod-pair em {
+  padding: 3px 9px;
+  color: var(--warning);
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.28);
+  border-radius: 999px;
+  font-size: 10px;
+  font-style: normal;
+}
+
+.installed-mod-count {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.installed-mod-examples {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 2px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.installed-mod-examples code {
+  overflow: hidden;
+  color: #a3a3a3;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.installed-mod-examples li.muted {
+  color: #525252;
+  font-size: 10px;
+}
+
+/* Mod comparison: can these two packages be combined? */
+
+.installed-compare {
+  padding: 18px 20px;
+}
+
+.installed-verdict {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 13px;
+  align-items: flex-start;
+  margin: 14px 0 0;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: #111111;
+}
+
+.installed-verdict.ok {
+  color: #86efac;
+  border-color: rgba(74, 222, 128, 0.3);
+}
+
+.installed-verdict.blocked {
+  color: var(--warning);
+  border-color: rgba(251, 191, 36, 0.3);
+}
+
+.installed-verdict strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 620;
+}
+
+.installed-verdict span {
+  display: block;
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.installed-compare-packages {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.installed-compare-packages li {
+  padding: 10px 12px;
+  background: #111111;
+  border: 1px solid var(--border-soft);
+  border-radius: 7px;
+}
+
+.installed-compare-packages strong {
+  display: block;
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 550;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.installed-compare-packages span {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.installed-hint code {
+  display: block;
+  margin-top: 5px;
+  overflow-wrap: anywhere;
+  color: #a3a3a3;
+  font-size: 10px;
+}
+
+/* Suggested material remapping for a merged package. */
+
+.installed-remap {
+  margin-top: 14px;
+  padding: 14px 16px;
+  border: 1px solid rgba(251, 191, 36, 0.28);
+  border-radius: 9px;
+}
+
+.installed-remap > .installed-hint:first-child {
+  margin-top: 0;
+  border: 0;
+  padding: 0;
+  background: none;
+}
+
+.installed-remap-head {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.installed-remap-head h3 {
+  font-size: 13px;
+}
+
+.installed-remap-list {
+  display: grid;
+  gap: 4px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.installed-remap-list li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 8px 10px;
+  background: #111111;
+  border: 1px solid var(--border-soft);
+  border-radius: 7px;
+}
+
+.installed-remap-list code {
+  overflow: hidden;
+  color: #d4d4d4;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.installed-remap-list svg {
+  color: var(--muted);
+  transform: rotate(-90deg);
+}
+
+/* Utilities hub: one nav entry, several tools behind a tab strip. */
+
+.utilities-shell {
+  display: grid;
+  gap: 0;
+}
+
+.utility-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  /* Same box as .page-stack, so the strip lines up with the content under it.
+     The bottom margin matches .content's top padding, leaving the strip with
+     equal breathing room above and below. */
+  max-width: 1240px;
+  margin: 0 auto 24px;
+  padding: 0;
+}
+
+.utility-tabs button {
+  min-height: 34px;
+  padding: 7px 13px;
+  color: var(--muted);
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  font-size: 12px;
+}
+
+.utility-tabs button:hover:not(:disabled) {
+  color: var(--foreground);
+  background: #171717;
+  border-color: var(--border-soft);
+}
+
+.utility-tabs button.active {
+  color: var(--foreground);
+  background: var(--accent);
+  border-color: #2e2e2e;
+}
+
+/* Each utility keeps its own heading, so tighten the gap under the tabs. */
+.utilities-shell .page-stack {
+  margin-top: 0;
+}
+
+.utilities-shell .page-heading {
+  padding-top: 0;
+}
+
+.installed-merge-list {
+  margin: 12px 0;
+}
+
+.installed-merge-list code {
+  color: #d4d4d4;
+}

@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 from .errors import StudioError, validation_error
+from .paths import normalize_internal_path
 from .vpk import VPK_SIGNATURE, VpkEntry, copy_vpk_entry, list_vpk
 
 
@@ -15,10 +16,39 @@ from .vpk import VPK_SIGNATURE, VpkEntry, copy_vpk_entry, list_vpk
 class SelectedEntry:
     source: Path
     entry: VpkEntry
+    # Where this entry is written in the combined package. Normally the path it
+    # already had, but a rename rule can redirect it somewhere else.
+    output_path: str
 
     @property
     def size(self) -> int:
         return self.entry.preload_bytes + self.entry.length
+
+
+@dataclass(frozen=True, slots=True)
+class RenameRule:
+    """Write one package's file at a different path in the combined output.
+
+    Needed because two mods can supply the same thing at different paths. A
+    retexture may sit in ``models/x/vindicta/materials/`` while the model that
+    should use it reads from ``models/x/hornet_v3/materials/``. Merging by
+    identical path cannot express that; redirecting the entry can.
+
+    Scoped to one package: the same internal path can exist in several inputs,
+    and only the named one is redirected.
+    """
+
+    package: str
+    source: str
+    target: str
+
+    @classmethod
+    def from_payload(cls, value: dict[str, str]) -> RenameRule:
+        return cls(
+            package=str(value["package"]),
+            source=normalize_internal_path(str(value["source"])),
+            target=normalize_internal_path(str(value["target"])),
+        )
 
 
 ProgressCallback = Callable[[dict[str, object]], None]
@@ -53,6 +83,7 @@ def combine_packages(
     paths: list[Path],
     output_path: Path,
     progress: ProgressCallback | None = None,
+    renames: list[RenameRule] | None = None,
 ) -> dict[str, object]:
     _validate_inputs(paths, minimum=2)
     if output_path.suffix.casefold() not in {".vpk", ".pak"}:
@@ -62,6 +93,12 @@ def combine_packages(
     if resolved_output in resolved_inputs:
         raise validation_error("The combined output cannot overwrite an input package")
     resolved_output.parent.mkdir(parents=True, exist_ok=True)
+
+    # Redirects, keyed by package filename then by the path inside it.
+    rename_map: dict[str, dict[str, str]] = {}
+    for rule in renames or []:
+        rename_map.setdefault(rule.package.casefold(), {})[rule.source.casefold()] = rule.target
+    _validate_renames(resolved_inputs, rename_map)
 
     winners: dict[str, SelectedEntry] = {}
     conflicts: list[dict[str, str]] = []
@@ -74,18 +111,22 @@ def combine_packages(
             total_inputs,
             f"Reading {package_path.name}…",
         )
+        redirects = rename_map.get(package_path.name.casefold(), {})
         for entry in list_vpk(package_path):
-            key = entry.path.casefold()
+            # A renamed entry takes part in precedence at its new path, which
+            # is the whole point: it has to be able to win that slot.
+            output = redirects.get(entry.path.casefold(), entry.path)
+            key = output.casefold()
             previous = winners.get(key)
             if previous:
                 conflicts.append(
                     {
-                        "path": entry.path,
+                        "path": output,
                         "replacedPackage": previous.source.name,
                         "winnerPackage": package_path.name,
                     }
                 )
-            winners[key] = SelectedEntry(package_path, entry)
+            winners[key] = SelectedEntry(package_path, entry, output)
         _emit(
             progress,
             "reading",
@@ -94,7 +135,7 @@ def combine_packages(
             f"Read {package_path.name}.",
         )
 
-    selected = sorted(winners.values(), key=lambda value: value.entry.path.casefold())
+    selected = sorted(winners.values(), key=lambda value: value.output_path.casefold())
     if not selected:
         raise StudioError("PACKAGE_EMPTY", "The selected packages contain no entries.")
     offsets: dict[str, int] = {}
@@ -105,7 +146,7 @@ def combine_packages(
                 "PACKAGE_TOO_LARGE",
                 "The merged single-file VPK exceeds the format's 32-bit data limit.",
             )
-        offsets[value.entry.path.casefold()] = data_offset
+        offsets[value.output_path.casefold()] = data_offset
         data_offset += value.size
 
     tree = _build_tree(selected, offsets)
@@ -121,21 +162,21 @@ def combine_packages(
                     "writing",
                     index - 1,
                     total_entries,
-                    f"Writing {value.entry.path}…",
+                    f"Writing {value.output_path}…",
                 )
                 copied = copy_vpk_entry(value.source, value.entry, output)
                 if copied != value.size:
                     raise StudioError(
                         "PACKAGE_WRITE_FAILED",
                         "A package entry did not produce the expected number of bytes.",
-                        {"path": value.entry.path},
+                        {"path": value.output_path},
                     )
                 _emit(
                     progress,
                     "writing",
                     index,
                     total_entries,
-                    f"Wrote {value.entry.path}.",
+                    f"Wrote {value.output_path}.",
                 )
         verified = list_vpk(temporary)
         if len(verified) != len(selected):
@@ -154,6 +195,9 @@ def combine_packages(
         "inputCount": len(resolved_inputs),
         "conflictCount": len(conflicts),
         "conflicts": conflicts,
+        "renamedCount": sum(
+            1 for value in selected if value.output_path != value.entry.path
+        ),
         "sizeBytes": resolved_output.stat().st_size,
     }
 
@@ -161,7 +205,7 @@ def combine_packages(
 def _build_tree(selected: list[SelectedEntry], offsets: dict[str, int]) -> bytes:
     grouped: dict[str, dict[str, list[SelectedEntry]]] = {}
     for value in selected:
-        parsed = PurePosixPath(value.entry.path)
+        parsed = PurePosixPath(value.output_path)
         extension = " "
         if parsed.suffix:
             extension = parsed.suffix[1:]
@@ -178,9 +222,11 @@ def _build_tree(selected: list[SelectedEntry], offsets: dict[str, int]) -> bytes
             tree.extend(directory.encode("utf-8") + b"\0")
             for value in sorted(
                 directories[directory],
-                key=lambda selected_entry: PurePosixPath(selected_entry.entry.path).stem.casefold(),
+                key=lambda selected_entry: PurePosixPath(
+                    selected_entry.output_path
+                ).stem.casefold(),
             ):
-                filename = PurePosixPath(value.entry.path).stem
+                filename = PurePosixPath(value.output_path).stem
                 tree.extend(filename.encode("utf-8") + b"\0")
                 tree.extend(
                     struct.pack(
@@ -188,7 +234,7 @@ def _build_tree(selected: list[SelectedEntry], offsets: dict[str, int]) -> bytes
                         value.entry.crc32,
                         0,
                         0x7FFF,
-                        offsets[value.entry.path.casefold()],
+                        offsets[value.output_path.casefold()],
                         value.size,
                         0xFFFF,
                     )
@@ -197,6 +243,38 @@ def _build_tree(selected: list[SelectedEntry], offsets: dict[str, int]) -> bytes
         tree.extend(b"\0")
     tree.extend(b"\0")
     return bytes(tree)
+
+
+def _validate_renames(
+    resolved_inputs: list[Path], rename_map: dict[str, dict[str, str]]
+) -> None:
+    """Reject rules that cannot apply, rather than silently doing nothing.
+
+    A rule naming a package or path that is not there is almost always a typo,
+    and the resulting package would look correct while missing the redirect.
+    """
+    available = {package.name.casefold(): package for package in resolved_inputs}
+    for package_name, redirects in rename_map.items():
+        package_path = available.get(package_name)
+        if not package_path:
+            raise validation_error(
+                "A rename rule names a package that is not being combined",
+                package=package_name,
+            )
+        contents = {entry.path.casefold() for entry in list_vpk(package_path)}
+        for source, target in redirects.items():
+            if source not in contents:
+                raise validation_error(
+                    "A rename rule names a file that is not in that package",
+                    package=package_path.name,
+                    path=source,
+                )
+            if not target or target.endswith("/"):
+                raise validation_error(
+                    "A rename rule has an empty destination path",
+                    package=package_path.name,
+                    path=source,
+                )
 
 
 def _validate_inputs(paths: list[Path], *, minimum: int = 1) -> None:

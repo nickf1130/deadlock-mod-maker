@@ -40,10 +40,12 @@ if (!SEMVER.test(requested)) {
 
 const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8"));
 const previous = packageJson.version;
-if (previous === requested) {
-  console.log(`Version is already ${requested}. Nothing to do.`);
-  process.exit(0);
-}
+
+// Note: package.json matching the requested version does not mean there is
+// nothing to do. A file further down the list can still have drifted - that is
+// exactly the case verify-version.mjs tells you to run this command for. So
+// every file is rewritten and "nothing to do" is decided at the end, from
+// whether any file actually changed.
 
 // Work out every edit first, then write. A file that does not contain the
 // expected pattern is a mistake worth stopping for: silently skipping it would
@@ -59,7 +61,7 @@ for (const source of versionSources(packageJson.name)) {
   if (source.pattern.exec(updated)?.[1] !== requested) {
     fail(`replacing the version in ${source.file} did not produce ${requested}`);
   }
-  edits.push({ filePath, text: updated, file: source.file });
+  edits.push({ filePath, text: updated, file: source.file, changed: updated !== text });
 }
 
 // package.json is edited textually rather than via JSON.stringify so the rest
@@ -72,14 +74,29 @@ const packageJsonUpdated = packageJsonText.replace(
 if (JSON.parse(packageJsonUpdated).version !== requested) {
   fail("could not update the version in package.json");
 }
-edits.unshift({ filePath: packageJsonPath, text: packageJsonUpdated, file: "package.json" });
+edits.unshift({
+  filePath: packageJsonPath,
+  text: packageJsonUpdated,
+  file: "package.json",
+  changed: packageJsonUpdated !== packageJsonText
+});
 
-for (const edit of edits) {
+const changed = edits.filter((edit) => edit.changed);
+if (changed.length === 0) {
+  console.log(`Every file already reports ${requested}. Nothing to do.`);
+  process.exit(0);
+}
+
+for (const edit of changed) {
   writeFileSync(edit.filePath, edit.text);
 }
 
-console.log(`Version ${previous} -> ${requested}`);
-for (const edit of edits) {
+console.log(
+  previous === requested
+    ? `Re-synced ${requested} across files that had drifted`
+    : `Version ${previous} -> ${requested}`
+);
+for (const edit of changed) {
   console.log(`  updated ${edit.file}`);
 }
 console.log("\nRun `npm run build` to produce artifacts with the new version.");

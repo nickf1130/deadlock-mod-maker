@@ -50,9 +50,18 @@ Common alternative CSDK names such as `Reduced_CSDK_12` and `Reduced CSDK 12` ar
 
 Only `data/` is created during a normal first launch. The other folders are created lazily by the feature that needs them. The automatic installer reads the publishers' current GitHub release metadata, downloads only missing assets, checks SHA-256 release digests when supplied, rejects unsafe ZIP paths, installs through temporary directories, and reruns diagnostics before reporting success.
 
-## PAK/VPK combiner
+## Utilities
 
-The PAK Combiner page accepts up to 50 `.vpk` or Valve-format `.pak` files. It lists internal paths and stored sizes before writing anything. Package order is significant: when multiple inputs contain the same case-insensitive internal path, the lower input wins. The output is independently reopened and verified after it is written.
+The **Utilities** page groups the tools that read finished mod packages rather than building them.
+None of them compile anything or write to the game folder.
+
+**PAK Combiner** accepts up to 50 `.vpk` or Valve-format `.pak` files. It lists internal paths and stored sizes before writing anything. Package order is significant: when multiple inputs contain the same case-insensitive internal path, the lower input wins. The output is independently reopened and verified after it is written.
+
+**Installed Mods** scans the game's `addons` folder and reports packages that claim the same path. Deadlock Mod Manager's records are read when present, so disabled mods and mods shipping several packages are not reported as conflicts. It also offers to combine the mods that share no loaded file into a single package.
+
+**Inspect a Mod** describes one package against the indexed game archive: which entries still match, which are gone, and which are resource kinds the indexer does not cover.
+
+**Compare Mods** reports whether two packages can be combined, including the case where they share no path but one replaces a model that never references the other's materials. Rename rules can then redirect those materials into the slots the model reads.
 
 ## Development setup
 

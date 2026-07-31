@@ -478,6 +478,12 @@ export type InstalledPackage = {
   filename: string;
   entryCount: number;
   sizeBytes: number;
+  /** Deadlock Mod Manager's id for the owning mod, or the filename if unmanaged. */
+  modId: string;
+  /** The mod's display name from the manager's catalogue, when resolvable. */
+  modName: string | null;
+  /** Disabled mods stay on disk but are never loaded, so they cannot conflict. */
+  enabled: boolean;
   /** Set when the package could not be read; it is reported rather than skipped. */
   error: string | null;
 };
@@ -486,6 +492,15 @@ export type InstalledPackage = {
 export type AddonConflict = {
   path: string;
   filenames: string[];
+  modIds: string[];
+};
+
+/** Two mods that overlap, and by how much. */
+export type ModConflict = {
+  modIds: string[];
+  filenames: string[];
+  pathCount: number;
+  examplePaths: string[];
 };
 
 /**
@@ -495,9 +510,79 @@ export type AddonConflict = {
 export type AddonConflictReport = {
   directory: string;
   packageCount: number;
+  enabledCount: number;
+  disabledCount: number;
+  /** True when a .dmm.json was found, so mod grouping is trustworthy. */
+  usesModManager: boolean;
   conflictCount: number;
-  conflictingFilenames: string[];
+  /** Overlaps on readmes and uncompiled sources the game does not load. */
+  otherOverlapCount: number;
+  modConflictCount: number;
+  /** Enabled packages sharing no loaded file, so merging them loses nothing. */
+  mergeableCount: number;
+  mergeable: InstalledPackage[];
   unreadableCount: number;
   packages: InstalledPackage[];
   conflicts: AddonConflict[];
+  otherOverlaps: AddonConflict[];
+  modConflicts: ModConflict[];
+};
+
+/** One package in a `mods.compare` result. */
+export type ComparedPackage = {
+  path: string;
+  filename: string;
+  entryCount: number;
+  sizeBytes: number;
+  /** Paths only this package has. These always survive a merge. */
+  uniqueCount: number;
+};
+
+/** One path present in more than one compared package. */
+export type SharedPath = {
+  path: string;
+  kind: string;
+  filenames: string[];
+  /**
+   * True when picking a winner is not enough. A Deadlock hero and their weapon
+   * share one .vmdl_c, so a model collision cannot be split by choosing files.
+   */
+  inseparable: boolean;
+};
+
+/**
+ * A package whose materials the other package's model never asks for. Two mods
+ * can share no path at all and still fail to combine: if one replaces the hero
+ * model and points every material slot at its own folder, the other's textures
+ * are never loaded — no conflict, no effect.
+ */
+export type ReferenceWarning = {
+  modelPackage: string;
+  modelPath: string;
+  supplierPackage: string;
+  unreferencedCount: number;
+  examples: string[];
+  /** Move each material to the slot the model reads, matched on filename. */
+  suggestedRenames: Array<{ source: string; target: string }>;
+  /** Materials with no matching slot; left alone rather than guessed at. */
+  unmatched: string[];
+};
+
+/** A redirect passed to `packages.combine`. */
+export type RenameRule = {
+  package: string;
+  source: string;
+  target: string;
+};
+
+/** Result of `mods.compare`: can these packages be combined? */
+export type ModComparisonReport = {
+  packages: ComparedPackage[];
+  sharedCount: number;
+  blockerCount: number;
+  /** False when a shared path is inseparable, or a model orphans the other mod. */
+  mergeable: boolean;
+  referenceWarnings: ReferenceWarning[];
+  countsByKind: Record<string, number>;
+  shared: SharedPath[];
 };

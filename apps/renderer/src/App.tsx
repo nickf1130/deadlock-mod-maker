@@ -4,6 +4,7 @@ import {
   ArrowUp,
   AudioLines,
   BookOpen,
+  Boxes,
   Box,
   Check,
   ChevronDown,
@@ -15,6 +16,7 @@ import {
   FileArchive,
   FileAudio,
   FolderOpen,
+  GitCompare,
   Gauge,
   GitFork,
   Image as ImageIcon,
@@ -47,6 +49,9 @@ import { SoundTutorial } from "./components/SoundTutorial";
 import { WaveformPlayer } from "./components/WaveformPlayer";
 import type {
   AddonConflictReport,
+  InstalledPackage,
+  ModComparisonReport,
+  ReferenceWarning,
   ModPackageReport,
   AudioMetadata,
   AppInfo,
@@ -82,18 +87,27 @@ type View =
   | "sounds"
   | "visuals"
   | "projects"
-  | "packages"
-  | "installed"
+  | "utilities"
   | "diagnostics"
   | "about";
+
+// Tools that operate on finished .vpk files, grouped behind one nav entry so
+// more can be added without crowding the sidebar.
+type Utility = "combiner" | "installed" | "inspect" | "compare";
+
+const UTILITIES: Array<{ id: Utility; label: string; icon: typeof AudioLines }> = [
+  { id: "combiner", label: "PAK Combiner", icon: Merge },
+  { id: "installed", label: "Installed Mods", icon: PackageSearch },
+  { id: "inspect", label: "Inspect a Mod", icon: FileArchive },
+  { id: "compare", label: "Compare Mods", icon: GitCompare }
+];
 
 const NAV_ITEMS: Array<{ id: View; label: string; icon: typeof AudioLines }> = [
   { id: "home", label: "Overview", icon: Gauge },
   { id: "sounds", label: "Sounds", icon: ListMusic },
   { id: "visuals", label: "Visuals (WIP)", icon: ImageIcon },
   { id: "projects", label: "Projects", icon: Layers3 },
-  { id: "packages", label: "PAK Combiner", icon: Merge },
-  { id: "installed", label: "Installed Mods", icon: PackageSearch },
+  { id: "utilities", label: "Utilities", icon: Boxes },
   { id: "diagnostics", label: "Diagnostics", icon: Activity },
   { id: "about", label: "About", icon: Info }
 ];
@@ -191,6 +205,11 @@ function App() {
   const [tutorialOpen, setTutorialOpen] = useState(false);
   const [bootMessage, setBootMessage] = useState("Starting secure Python workspace…");
   const [bootPhase, setBootPhase] = useState<BootPhase>("loading");
+  // Held here rather than inside the page so results survive navigation.
+  const [addonConflicts, setAddonConflicts] = useState<AddonConflictReport | null>(null);
+  const [inspectedMod, setInspectedMod] = useState<ModPackageReport | null>(null);
+  const [modComparison, setModComparison] = useState<ModComparisonReport | null>(null);
+  const [utility, setUtility] = useState<Utility>("combiner");
   const [appVersion, setAppVersion] = useState<string | null>(null);
   const startupCheckStarted = useRef(false);
   const tutorialCheckStarted = useRef(false);
@@ -488,10 +507,8 @@ function App() {
                 ? "Build details, updates, and project links"
                 : activeProject
                 ? `${activeProject.displayName} · ${activeProject.targetAssets.length + activeProject.visualAssets.length} replacement${activeProject.targetAssets.length + activeProject.visualAssets.length === 1 ? "" : "s"}`
-                : view === "packages"
-                  ? "Inspect and combine Valve package files"
-                : view === "installed"
-                  ? "Check mods already in your game folder"
+                : view === "utilities"
+                  ? "Tools for inspecting, comparing and combining mod packages"
                 : "No active project"}
             </p>
           </div>
@@ -596,15 +613,18 @@ function App() {
               onNotice={setNotice}
             />
           )}
-          {view === "packages" && (
-            <PackageCombinerPage
-              progress={packageProgress}
-              onProgressReset={() => setPackageProgress(null)}
-              onNotice={setNotice}
-            />
-          )}
-          {view === "installed" && (
-            <InstalledModsPage
+          {view === "utilities" && (
+            <UtilitiesPage
+              utility={utility}
+              onUtility={setUtility}
+              packageProgress={packageProgress}
+              onPackageProgressReset={() => setPackageProgress(null)}
+              conflicts={addonConflicts}
+              onConflicts={setAddonConflicts}
+              report={inspectedMod}
+              onReport={setInspectedMod}
+              comparison={modComparison}
+              onComparison={setModComparison}
               onNavigate={setView}
               onProjectCreated={() => void loadBootstrap()}
               onNotice={setNotice}
@@ -2690,6 +2710,53 @@ function BuildPage({
   );
 }
 
+// The verdict has three shapes: a plain conflict, an invisible-mod warning
+// (nothing collides, yet one mod still will not show), or all clear.
+function verdictHeadline(report: ModComparisonReport): string {
+  if (report.blockerCount > 0) return "These cannot be merged by combining files";
+  if (report.referenceWarnings.length > 0) return "No conflicts, but one mod will not show";
+  if (report.sharedCount === 0) return "Safe to combine — nothing overlaps";
+  return "Safe to combine — pick a winner per file";
+}
+
+function verdictDetail(report: ModComparisonReport): string {
+  if (report.blockerCount > 0) {
+    return `${report.blockerCount} shared model${report.blockerCount === 1 ? "" : "s"}. In Deadlock a hero and the weapon they hold share one .vmdl_c, so whichever mod wins that file brings its body and its gun together. Taking the body from one and the weapon from the other means editing the model itself, not merging packages.`;
+  }
+  if (report.referenceWarnings.length > 0) {
+    return "These mods do not collide on any file, but a replaced model points its material slots somewhere the other mod does not supply. See below.";
+  }
+  if (report.sharedCount === 0) {
+    return "These mods touch entirely different files, so order does not matter.";
+  }
+  return `${report.sharedCount} shared file${report.sharedCount === 1 ? "" : "s"}. Whichever package comes last in the PAK Combiner wins those, and everything else from both is kept.`;
+}
+
+// A package the mod manager does not track has no recorded name anywhere: not
+// in its folder records, not in its catalogue, and mod READMEs are usually
+// empty. Saying so beats showing a bare filename that reads like a bug.
+function describePackage(entry: InstalledPackage, usesModManager: boolean): string {
+  if (entry.modName) return entry.modName;
+  if (!usesModManager) return entry.filename;
+  return `${entry.filename} (added by hand)`;
+}
+
+// Mod ids come from Deadlock Mod Manager and mean nothing on their own, so
+// show the packages the mod owns alongside it.
+function describeMod(modId: string, report: AddonConflictReport): string {
+  const packages = report.packages.filter((installed) => installed.modId === modId);
+  const owned = packages.map((installed) => installed.filename);
+  // Packages the manager does not track use their own filename as the id, so
+  // there is nothing to add by repeating it.
+  if (owned.length === 1 && owned[0] === modId) return modId;
+  if (!report.usesModManager || owned.length === 0) return modId;
+  // The manager's catalogue gives real titles; the id is only a fallback for
+  // mods it no longer lists.
+  const name = packages.find((installed) => installed.modName)?.modName;
+  if (name) return `${name} (${owned.join(", ")})`;
+  return `${owned.join(", ")} (added by hand)`;
+}
+
 // "17 others" reads badly, and "other" covers several real resource types.
 function describeKindCount(kind: string, count: number): string {
   if (kind === "other") return `${count} other file${count === 1 ? "" : "s"}`;
@@ -2700,28 +2767,133 @@ function describeKindCount(kind: string, count: number): string {
 // and any single .vpk the user wants to look at before installing it.
 // Backend: python/deadlock_sound_studio/mods/
 function InstalledModsPage({
+  section,
+  conflicts,
+  onConflicts,
+  report,
+  onReport,
+  comparison,
+  onComparison,
   onNavigate,
   onProjectCreated,
   onNotice,
   onInfoNotice
 }: {
+  section: Exclude<Utility, "combiner">;
+  conflicts: AddonConflictReport | null;
+  onConflicts: (report: AddonConflictReport | null) => void;
+  report: ModPackageReport | null;
+  onReport: (report: ModPackageReport | null) => void;
+  comparison: ModComparisonReport | null;
+  onComparison: (report: ModComparisonReport | null) => void;
   onNavigate: (view: View) => void;
   onProjectCreated: () => void;
   onNotice: (message: string | null) => void;
   onInfoNotice: (message: string | null) => void;
 }) {
-  const [conflicts, setConflicts] = useState<AddonConflictReport | null>(null);
   const [scanning, setScanning] = useState(false);
-  const [report, setReport] = useState<ModPackageReport | null>(null);
   const [inspecting, setInspecting] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [comparing, setComparing] = useState(false);
+  const [merging, setMerging] = useState(false);
+  // Which suggested redirects the user has kept. Keyed by source path.
+  const [skippedRenames, setSkippedRenames] = useState<Set<string>>(new Set());
+
+  // Rolls the mods that share no loaded file into a single package. Written
+  // wherever the user chooses, never into the addons folder: the app does not
+  // touch the game directory, and overwriting files the mod manager tracks
+  // would desync its records.
+  async function mergeNonConflicting() {
+    if (!conflicts || conflicts.mergeableCount < 2) return;
+    const output = await window.studio.selectPackageOutput();
+    if (!output) return;
+    setMerging(true);
+    try {
+      const result = await window.studio.backend<PackageCombineResult>("packages.combine", {
+        paths: conflicts.mergeable.map((entry) => entry.path),
+        outputPath: output
+      });
+      onInfoNotice(
+        `Combined ${conflicts.mergeableCount} mods into ${result.outputPath} (${result.entryCount.toLocaleString()} files).`
+      );
+    } catch (error) {
+      onNotice(errorMessage(error));
+    } finally {
+      setMerging(false);
+    }
+  }
+
+  // Writes a package where the retexture's materials land in the slots the
+  // replaced model actually reads from. The supplier goes last so its files
+  // win those paths.
+  async function buildMerged(warning: ReferenceWarning) {
+    if (!comparison) return;
+    const renames = warning.suggestedRenames
+      .filter((rule) => !skippedRenames.has(rule.source))
+      .map((rule) => ({
+        package: warning.supplierPackage,
+        source: rule.source,
+        target: rule.target
+      }));
+    if (renames.length === 0) {
+      onNotice("Keep at least one material mapping to build a merged package.");
+      return;
+    }
+    const modelPackage = comparison.packages.find(
+      (entry) => entry.filename === warning.modelPackage
+    );
+    const supplierPackage = comparison.packages.find(
+      (entry) => entry.filename === warning.supplierPackage
+    );
+    if (!modelPackage || !supplierPackage) return;
+    const output = await window.studio.selectPackageOutput();
+    if (!output) return;
+
+    setMerging(true);
+    try {
+      const result = await window.studio.backend<PackageCombineResult & { renamedCount: number }>(
+        "packages.combine",
+        {
+          paths: [modelPackage.path, supplierPackage.path],
+          outputPath: output,
+          renames
+        }
+      );
+      onInfoNotice(
+        `Merged package written with ${result.renamedCount} redirected material${result.renamedCount === 1 ? "" : "s"}: ${result.outputPath}`
+      );
+    } catch (error) {
+      onNotice(errorMessage(error));
+    } finally {
+      setMerging(false);
+    }
+  }
+
+  // Compares whole packages, which is what a merge actually operates on.
+  async function compareMods() {
+    const selected = await window.studio.selectPackages();
+    if (selected.length < 2) {
+      if (selected.length === 1) onNotice("Choose at least two mod files to compare.");
+      return;
+    }
+    setComparing(true);
+    try {
+      onComparison(
+        await window.studio.backend<ModComparisonReport>("mods.compare", { paths: selected })
+      );
+    } catch (error) {
+      onNotice(errorMessage(error));
+    } finally {
+      setComparing(false);
+    }
+  }
 
   async function scanAddons() {
     setScanning(true);
     try {
       // No directory argument: the backend derives it from the Deadlock folder
       // already chosen in Diagnostics.
-      setConflicts(await window.studio.backend<AddonConflictReport>("mods.addonConflicts"));
+      onConflicts(await window.studio.backend<AddonConflictReport>("mods.addonConflicts"));
     } catch (error) {
       onNotice(errorMessage(error));
     } finally {
@@ -2734,7 +2906,7 @@ function InstalledModsPage({
     if (!selected.length) return;
     setInspecting(true);
     try {
-      setReport(
+      onReport(
         await window.studio.backend<ModPackageReport>("mods.inspect", { path: selected[0] })
       );
     } catch (error) {
@@ -2769,21 +2941,41 @@ function InstalledModsPage({
 
   return (
     <div className="page-stack installed-mods-page">
-      <PageHeading
-        title="Installed mods"
-        description="Check the mods already in your game folder, and look inside a mod file before you trust it."
-        actions={
-          <>
-            <button disabled={inspecting} onClick={() => void inspectPackage()}>
-              <FileArchive size={15} /> Inspect a mod file
-            </button>
+      {section === "installed" && (
+        <PageHeading
+          title="Installed mods"
+          description="Compare every mod in your game folder and find the ones replacing the same file."
+          actions={
             <button className="primary" disabled={scanning} onClick={() => void scanAddons()}>
               <RefreshCw size={15} className={scanning ? "spin" : ""} /> Scan addons folder
             </button>
-          </>
-        }
-      />
+          }
+        />
+      )}
+      {section === "inspect" && (
+        <PageHeading
+          title="Inspect a mod"
+          description="See which game files a downloaded .vpk replaces, and whether they still exist in the current build of Deadlock."
+          actions={
+            <button className="primary" disabled={inspecting} onClick={() => void inspectPackage()}>
+              <FileArchive size={15} /> Choose a mod file
+            </button>
+          }
+        />
+      )}
+      {section === "compare" && (
+        <PageHeading
+          title="Compare mods"
+          description="Check whether two mods can be combined, and build a merged package when they can."
+          actions={
+            <button className="primary" disabled={comparing} onClick={() => void compareMods()}>
+              <GitCompare size={15} /> Choose two mod files
+            </button>
+          }
+        />
+      )}
 
+      {section === "installed" && (
       <section className="card installed-scan">
         <div className="section-heading">
           <div>
@@ -2806,48 +2998,106 @@ function InstalledModsPage({
         {conflicts && (
           <>
             <div className="build-summary">
-              <Metadata label="Installed mods" value={conflicts.packageCount.toString()} />
-              <Metadata label="Conflicts" value={conflicts.conflictCount.toString()} />
-              <Metadata label="Mods affected" value={conflicts.conflictingFilenames.length.toString()} />
-              <Metadata label="Unreadable" value={conflicts.unreadableCount.toString()} />
+              <Metadata label="Enabled mods" value={conflicts.enabledCount.toString()} />
+              <Metadata label="Mod pairs clashing" value={conflicts.modConflictCount.toString()} />
+              <Metadata label="Files affected" value={conflicts.conflictCount.toString()} />
+              <Metadata label="Disabled / unreadable" value={`${conflicts.disabledCount} / ${conflicts.unreadableCount}`} />
             </div>
             <code className="installed-directory">{conflicts.directory}</code>
 
-            {conflicts.conflictCount === 0 ? (
+            {conflicts.modConflictCount === 0 ? (
               <div className="empty compact">
                 <Check size={22} />
                 <strong>No conflicts found</strong>
                 <span>
-                  {conflicts.packageCount} installed mod
-                  {conflicts.packageCount === 1 ? "" : "s"} replace different files.
+                  {conflicts.enabledCount} enabled mod
+                  {conflicts.enabledCount === 1 ? "" : "s"} replace different game files.
                 </span>
               </div>
             ) : (
               <>
                 <p className="installed-hint">
-                  <ShieldAlert size={13} /> Which mod wins depends on the game's addon load
-                  order, so this does not predict a winner. Removing one of each pair is the
-                  reliable fix.
+                  <ShieldAlert size={13} /> Which mod wins depends on the order the game mounts
+                  the addons folder, so this does not name a winner.
+                  {conflicts.usesModManager
+                    ? " Deadlock Mod Manager controls that order through the pakNN numbering it assigns, so change it there."
+                    : " Mods are loaded from the pakNN numbering on each file."}
                 </p>
-                <ul className="installed-conflict-list">
-                  {conflicts.conflicts.slice(0, 100).map((conflict) => (
-                    <li key={conflict.path}>
-                      <code>{conflict.path}</code>
-                      <span>
-                        {conflict.filenames.map((filename) => (
-                          <em key={filename}>{filename}</em>
+                <ul className="installed-mod-conflicts">
+                  {conflicts.modConflicts.map((pair) => (
+                    <li key={pair.modIds.join("+")}>
+                      <div className="installed-mod-pair">
+                        {pair.modIds.map((modId) => (
+                          <em key={modId}>{describeMod(modId, conflicts)}</em>
                         ))}
+                      </div>
+                      <span className="installed-mod-count">
+                        {pair.pathCount} file{pair.pathCount === 1 ? "" : "s"}
                       </span>
+                      <ul className="installed-mod-examples">
+                        {pair.examplePaths.map((example) => (
+                          <li key={example}>
+                            <code>{example}</code>
+                          </li>
+                        ))}
+                        {pair.pathCount > pair.examplePaths.length && (
+                          <li className="muted">
+                            and {pair.pathCount - pair.examplePaths.length} more
+                          </li>
+                        )}
+                      </ul>
                     </li>
                   ))}
                 </ul>
-                {conflicts.conflictCount > 100 && (
-                  <p className="overview-more">
-                    and {conflicts.conflictCount - 100} more conflicting path
-                    {conflicts.conflictCount - 100 === 1 ? "" : "s"}
-                  </p>
-                )}
               </>
+            )}
+
+            {conflicts.mergeableCount >= 2 && (
+              <div className="installed-remap">
+                <div className="section-heading">
+                  <div>
+                    <h3>
+                      Combine {conflicts.mergeableCount} non-conflicting mods into one package
+                    </h3>
+                    <p>
+                      These share no file the game loads, so merging them cannot lose anything.
+                      Mods that overlap another package are left out.
+                    </p>
+                  </div>
+                  <button
+                    className="primary"
+                    disabled={merging}
+                    onClick={() => void mergeNonConflicting()}
+                  >
+                    <Merge size={15} /> Combine into one
+                  </button>
+                </div>
+                <ul className="installed-mod-examples installed-merge-list">
+                  {conflicts.mergeable.map((entry) => (
+                    <li key={entry.path}>
+                      <code>{describePackage(entry, conflicts.usesModManager)}</code>
+                    </li>
+                  ))}
+                </ul>
+                <p className="installed-hint">
+                  <Info size={13} />
+                  <span>
+                    The merged file is written where you choose, not into the game folder. To use
+                    it, disable the original mods in Deadlock Mod Manager first - otherwise both
+                    copies load and the originals win. Removing the originals also means the
+                    manager can no longer enable or disable them individually.
+                  </span>
+                </p>
+              </div>
+            )}
+
+            {conflicts.otherOverlapCount > 0 && (
+              <p className="installed-hint">
+                <Info size={13} /> {conflicts.otherOverlapCount} other path
+                {conflicts.otherOverlapCount === 1 ? " is" : "s are"} shared between mods —
+                readmes and uncompiled sources the game does not load. These are not counted
+                above because they have no effect in game.
+              </p>
             )}
 
             {conflicts.unreadableCount > 0 && (
@@ -2867,7 +3117,168 @@ function InstalledModsPage({
           </>
         )}
       </section>
+      )}
 
+      {section === "compare" && !comparison && (
+        <div className="card empty compact">
+          <GitCompare size={22} />
+          <strong>No comparison yet</strong>
+          <span>Choose two mod files to see whether they can be combined.</span>
+        </div>
+      )}
+
+      {section === "compare" && comparison && (
+        <section className="card installed-compare">
+          <div className="section-heading">
+            <div>
+              <h3>Can these mods be combined?</h3>
+              <p>
+                Merging is decided per file: for every path both mods contain, one has to win.
+              </p>
+            </div>
+            <button className="text-button" onClick={() => onComparison(null)}>
+              <X size={14} /> Clear
+            </button>
+          </div>
+
+          <div
+            className={`installed-verdict ${comparison.mergeable ? "ok" : "blocked"}`}
+            role="status"
+          >
+            {comparison.mergeable ? <Check size={18} /> : <ShieldAlert size={18} />}
+            <div>
+              <strong>{verdictHeadline(comparison)}</strong>
+              <span>{verdictDetail(comparison)}</span>
+            </div>
+          </div>
+
+          {comparison.referenceWarnings.map((warning) => {
+            const kept = warning.suggestedRenames.filter(
+              (rule) => !skippedRenames.has(rule.source)
+            );
+            return (
+              <div
+                className="installed-remap"
+                key={`${warning.modelPackage}-${warning.supplierPackage}-${warning.modelPath}`}
+              >
+                <p className="installed-hint warning-hint">
+                  <ShieldAlert size={13} />
+                  <span>
+                    <strong>{warning.modelPackage}</strong> replaces a model that does not
+                    reference any of the {warning.unreferencedCount} material
+                    {warning.unreferencedCount === 1 ? "" : "s"} in{" "}
+                    <strong>{warning.supplierPackage}</strong>. Installed side by side they will
+                    not conflict, but the second has no visible effect — its materials are never
+                    loaded.
+                    <code>{warning.modelPath}</code>
+                  </span>
+                </p>
+
+                {warning.suggestedRenames.length > 0 && (
+                  <>
+                    <div className="section-heading installed-remap-head">
+                      <div>
+                        <h3>Build a merged package</h3>
+                        <p>
+                          Each kept material is written into the slot the model reads from.
+                          Everything else comes from <strong>{warning.modelPackage}</strong>.
+                        </p>
+                      </div>
+                      <button
+                        className="primary"
+                        disabled={merging || kept.length === 0}
+                        onClick={() => void buildMerged(warning)}
+                      >
+                        <Merge size={15} /> Build merged VPK
+                      </button>
+                    </div>
+                    <ul className="installed-remap-list">
+                      {warning.suggestedRenames.map((rule) => (
+                        <li key={rule.source}>
+                          <input
+                            type="checkbox"
+                            checked={!skippedRenames.has(rule.source)}
+                            onChange={() =>
+                              setSkippedRenames((current) => {
+                                const next = new Set(current);
+                                if (next.has(rule.source)) next.delete(rule.source);
+                                else next.add(rule.source);
+                                return next;
+                              })
+                            }
+                          />
+                          <code>{rule.source}</code>
+                          <ArrowDown size={12} />
+                          <code>{rule.target}</code>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+
+                {warning.unmatched.length > 0 && (
+                  <p className="installed-hint">
+                    <Info size={13} />
+                    <span>
+                      {warning.unmatched.length} material
+                      {warning.unmatched.length === 1 ? " has" : "s have"} no matching slot in the
+                      model and {warning.unmatched.length === 1 ? "is" : "are"} left out. Renaming
+                      across different names is a guess about the author's intent, so it is not
+                      done automatically.
+                      {warning.unmatched.map((value) => (
+                        <code key={value}>{value}</code>
+                      ))}
+                    </span>
+                  </p>
+                )}
+              </div>
+            );
+          })}
+
+          <ul className="installed-compare-packages">
+            {comparison.packages.map((entry) => (
+              <li key={entry.path}>
+                <strong>{entry.filename}</strong>
+                <span>
+                  {entry.entryCount} file{entry.entryCount === 1 ? "" : "s"} ·{" "}
+                  {entry.uniqueCount} unique · {formatBytes(entry.sizeBytes)}
+                </span>
+              </li>
+            ))}
+          </ul>
+
+          {comparison.sharedCount > 0 && (
+            <>
+              <div className="installed-kinds">
+                {Object.entries(comparison.countsByKind).map(([kind, count]) => (
+                  <span key={kind}>{describeKindCount(kind, count)} shared</span>
+                ))}
+              </div>
+              <ul className="installed-entry-list">
+                {comparison.shared.slice(0, 200).map((entry) => (
+                  <li key={entry.path} className={entry.inseparable ? "missing" : ""}>
+                    {entry.inseparable ? (
+                      <StatusBadge status="invalid" />
+                    ) : (
+                      <span className="status status-unchecked" title="Overridable">
+                        <Minus size={15} strokeWidth={2.4} aria-hidden="true" />
+                      </span>
+                    )}
+                    <code>{entry.path}</code>
+                    <span>{entry.kind}</span>
+                    <span>{entry.inseparable ? "blocks" : "pick one"}</span>
+                  </li>
+                ))}
+              </ul>
+              {comparison.sharedCount > 200 && (
+                <p className="overview-more">and {comparison.sharedCount - 200} more shared files</p>
+              )}
+            </>
+          )}
+        </section>
+      )}
+
+      {section === "inspect" && (
       <section className="card installed-inspect">
         <div className="section-heading">
           <div>
@@ -2968,6 +3379,85 @@ function InstalledModsPage({
           </>
         )}
       </section>
+      )}
+    </div>
+  );
+}
+
+// One nav entry hosting several package tools. Each utility keeps its own
+// heading and state; this only picks which one is showing.
+function UtilitiesPage({
+  utility,
+  onUtility,
+  packageProgress,
+  onPackageProgressReset,
+  conflicts,
+  onConflicts,
+  report,
+  onReport,
+  comparison,
+  onComparison,
+  onNavigate,
+  onProjectCreated,
+  onNotice,
+  onInfoNotice
+}: {
+  utility: Utility;
+  onUtility: (utility: Utility) => void;
+  packageProgress: PackageProgress | null;
+  onPackageProgressReset: () => void;
+  conflicts: AddonConflictReport | null;
+  onConflicts: (report: AddonConflictReport | null) => void;
+  report: ModPackageReport | null;
+  onReport: (report: ModPackageReport | null) => void;
+  comparison: ModComparisonReport | null;
+  onComparison: (report: ModComparisonReport | null) => void;
+  onNavigate: (view: View) => void;
+  onProjectCreated: () => void;
+  onNotice: (message: string | null) => void;
+  onInfoNotice: (message: string | null) => void;
+}) {
+  return (
+    <div className="utilities-shell">
+      <nav className="utility-tabs" aria-label="Utilities">
+        {UTILITIES.map((item) => {
+          const Icon = item.icon;
+          return (
+            <button
+              key={item.id}
+              className={item.id === utility ? "active" : ""}
+              aria-current={item.id === utility ? "page" : undefined}
+              onClick={() => onUtility(item.id)}
+            >
+              <Icon size={15} />
+              {item.label}
+            </button>
+          );
+        })}
+      </nav>
+
+      {utility === "combiner" && (
+        <PackageCombinerPage
+          progress={packageProgress}
+          onProgressReset={onPackageProgressReset}
+          onNotice={onNotice}
+        />
+      )}
+      {utility !== "combiner" && (
+        <InstalledModsPage
+          section={utility}
+          conflicts={conflicts}
+          onConflicts={onConflicts}
+          report={report}
+          onReport={onReport}
+          comparison={comparison}
+          onComparison={onComparison}
+          onNavigate={onNavigate}
+          onProjectCreated={onProjectCreated}
+          onNotice={onNotice}
+          onInfoNotice={onInfoNotice}
+        />
+      )}
     </div>
   );
 }

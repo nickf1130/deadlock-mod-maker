@@ -20,6 +20,8 @@ Deadlock Mods are currently a gray area; use this and related tools at your own 
 - Allows you to trim, fade, normalize and loop audio for you. For more advanced audio tweaks, consider something like Audacity.
 - Packages everything into one `.vpk` file and verifies the contents before saying it worked.
 - Warns you when Deadlock updates and your mod may have broken, and can re-point it in one click.
+- Checks the mods you already have installed for conflicts, and can look inside any downloaded
+  `.vpk` before you trust it.
 
 **It never modifies your Deadlock installation.** It only reads the game files and writes new
 mod files into its own folder. Installing the finished mod is a manual step you do yourself.
@@ -122,6 +124,37 @@ Deadlock Mod Maker is not associated with Deadlock Mod Manager. I created this a
 
 > Use mods at your own risk. Valve may change what is permitted at any time, and modifying game
 > files can carry consequences for your account. Only ever install mods you understand.
+
+---
+
+## Checking mods you already have
+
+The **Utilities** page holds tools that read mod packages rather than building them, each on its
+own tab. Nothing here compiles anything or writes to your game folder.
+
+**PAK Combiner** merges several `.vpk` or `.pak` files into one. Order matters: when two packages
+contain the same internal path, the lower one wins.
+
+**Installed Mods** compares every mod you have installed and reports the ones replacing the
+same file. Only one of them can win, which is the usual reason an installed mod appears to do
+nothing. If you use Deadlock Mod Manager, the app reads its records so disabled mods and mods that
+ship several `.vpk` files are not reported as false conflicts. It does not guess which mod wins -
+that depends on the order the game mounts the folder, which Deadlock Mod Manager controls through
+the `pakNN` numbering it assigns.
+
+**Inspect a Mod** shows what a downloaded `.vpk` replaces and whether those files still exist
+in the current build of Deadlock, which tells you quickly whether a mod has been broken by a patch.
+Resource types the app does not index yet, such as Panorama UI and models, are marked as unchecked
+rather than reported as missing.
+
+**Compare Mods** answers whether two mods can be combined. Sharing a texture or material is
+harmless - pick a winner. Sharing a *model* is not, because a Deadlock hero and the weapon they
+hold live in the same file, so whichever mod wins brings both.
+
+It also catches a subtler case: two mods that share no file at all, yet still will not both apply,
+because one replaces a model whose material slots point somewhere the other mod does not supply.
+When that happens the app offers to build a merged `.vpk`, moving the second mod's materials into
+the slots the model actually reads from.
 
 ---
 
