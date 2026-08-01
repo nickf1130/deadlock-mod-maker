@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import uuid
 from pathlib import Path
 from typing import Any, Literal
@@ -16,10 +17,15 @@ from ..batch import (
 from ..build import BuildJob, create_compatibility_copy, create_zip
 from ..database import Database
 from ..diagnostics import run_diagnostics
-from ..errors import StudioError, capability_error
+from ..errors import StudioError, capability_error, validation_error
 from ..external.process import CancellationToken
 from ..indexing import index_archive
-from ..mods import compare_mod_packages, find_addon_conflicts, inspect_mod_package
+from ..mods import (
+    compare_mod_packages,
+    find_addon_conflicts,
+    inspect_mod_package,
+    move_packages_to_backup,
+)
 from ..models import (
     LoopSettings,
     ProcessingSettings,
@@ -27,11 +33,15 @@ from ..models import (
     VisualResourceKind,
 )
 from ..packages import RenameRule, combine_packages, extract_package, inspect_packages
-from ..paths import AppPaths
+from ..paths import AppPaths, normalize_internal_path
 from ..projects import ProjectService, detect_conflicts
 from ..requirements import install_missing_requirements
 from ..settings import load_settings, save_settings
-from ..source_viewer import export_sound_preview, export_visual_preview
+from ..source_viewer import (
+    export_package_sound,
+    export_sound_preview,
+    export_visual_preview,
+)
 from ..updates import relocation_score
 from ..visuals import inspect_visual_source
 from ..vpk import list_vpk
@@ -41,6 +51,24 @@ def _optional_path(value: str | None) -> Path | None:
     if value is None:
         return None
     return Path(value)
+
+
+def _package_cache_key(package: Path) -> str:
+    """Identify a mod file by where it is and when it last changed.
+
+    Reinstalling or updating a mod rewrites the .vpk, and the previews taken
+    from the old one are then wrong. Folding the modification time into the key
+    retires them without needing to hunt them down.
+    """
+    digest = hashlib.sha1(
+        f"{package.resolve()}|{package.stat().st_mtime_ns}".encode("utf-8")
+    )
+    return digest.hexdigest()[:16]
+
+
+def _path_cache_key(internal_path: str) -> str:
+    """A filesystem-safe folder name for an archive-internal path."""
+    return hashlib.sha1(internal_path.casefold().encode("utf-8")).hexdigest()[:16]
 
 
 class ParamsModel(BaseModel):
@@ -236,6 +264,17 @@ class AddonConflictParams(ParamsModel):
     directory: str | None = None
 
 
+class ModSoundPreviewParams(ParamsModel):
+    """One sound inside one mod package."""
+
+    path: str
+    internal_path: str = Field(alias="internalPath")
+
+
+class BackupPackagesParams(ParamsModel):
+    paths: list[str] = Field(min_length=1, max_length=50)
+
+
 class BackendRouter:
     def __init__(self, paths: AppPaths, emit_event):
         self.paths = paths
@@ -292,6 +331,8 @@ class BackendRouter:
             "packages.extract": self.extract_package,
             "mods.inspect": self.inspect_mod,
             "mods.addonConflicts": self.addon_conflicts,
+            "mods.previewSound": self.preview_mod_sound,
+            "mods.backupPackages": self.backup_packages,
             "mods.compare": self.compare_mods,
         }
 
@@ -940,6 +981,45 @@ class BackendRouter:
         """Report what two mod packages have in common."""
         params = CompareModsParams.model_validate(raw)
         return compare_mod_packages([Path(value) for value in params.paths]).as_payload()
+
+    def preview_mod_sound(self, raw: dict[str, Any]) -> dict[str, Any]:
+        """Decompile one sound out of an installed mod so it can be played.
+
+        The same export the game archive uses, pointed at the mod's own .vpk.
+        Cache validity is keyed on the package's modification time, so
+        reinstalling a mod produces a fresh preview rather than the old one.
+        """
+        params = ModSoundPreviewParams.model_validate(raw)
+        package = Path(params.path)
+        internal = normalize_internal_path(params.internal_path)
+        if not internal.casefold().endswith(".vsnd_c"):
+            raise validation_error(
+                "Only compiled sounds can be previewed", path=internal
+            )
+        if not package.is_file():
+            raise validation_error("Mod package does not exist", path=str(package))
+
+        diagnostics = self._diagnostics()
+        preview = export_package_sound(
+            _optional_path(diagnostics.resolved.source2_viewer_cli),
+            self.paths,
+            package,
+            internal,
+            cache_root=self.paths.cache
+            / "mod-previews"
+            / _package_cache_key(package)
+            / _path_cache_key(internal),
+        )
+        metadata = inspect_audio(preview, _optional_path(diagnostics.resolved.ffprobe))
+        metadata.preview_path = str(preview)
+        return metadata.model_dump(by_alias=True)
+
+    def backup_packages(self, raw: dict[str, Any]) -> dict[str, object]:
+        """Move packages out of the addons folder into the backup folder."""
+        params = BackupPackagesParams.model_validate(raw)
+        return move_packages_to_backup(
+            [Path(value) for value in params.paths], self.paths.backups
+        ).as_payload()
 
     def addon_conflicts(self, raw: dict[str, Any]) -> dict[str, object]:
         """Report installed mods that claim the same game path."""

@@ -55,6 +55,8 @@ export type BackendMethod =
   | "packages.extract"
   | "mods.inspect"
   | "mods.addonConflicts"
+  | "mods.previewSound"
+  | "mods.backupPackages"
   | "mods.compare";
 
 export const BACKEND_ALLOWLIST = new Set<BackendMethod>([
@@ -106,6 +108,8 @@ export const BACKEND_ALLOWLIST = new Set<BackendMethod>([
   "packages.extract",
   "mods.inspect",
   "mods.addonConflicts",
+  "mods.previewSound",
+  "mods.backupPackages",
   "mods.compare"
 ]);
 

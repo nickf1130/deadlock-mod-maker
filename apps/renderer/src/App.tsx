@@ -30,6 +30,7 @@ import {
   PackageCheck,
   PackageOpen,
   PackageSearch,
+  Play,
   Plus,
   RefreshCw,
   Search,
@@ -57,7 +58,9 @@ import type {
   InstalledPackage,
   ModComparisonReport,
   ReferenceWarning,
+  ModEntry,
   ModPackageReport,
+  PackageBackupResult,
   AudioMetadata,
   AppInfo,
   Bootstrap,
@@ -2984,8 +2987,60 @@ function InstalledModsPage({
   const [creating, setCreating] = useState(false);
   const [comparing, setComparing] = useState(false);
   const [merging, setMerging] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const [confirmRemoval, setConfirmRemoval] = useState(false);
+  // Which sound of the inspected mod is playing, and where its preview landed.
+  const [auditioning, setAuditioning] = useState<string | null>(null);
+  const [audition, setAudition] = useState<{ path: string; url: string } | null>(null);
   // Which suggested redirects the user has kept. Keyed by source path.
   const [skippedRenames, setSkippedRenames] = useState<Set<string>>(new Set());
+
+  // Moves the packages the mod manager has lost track of out of the addons
+  // folder. Files are moved, never deleted, and the scan is refreshed
+  // afterwards so the page reflects the folder as it now is.
+  async function removeUntracked() {
+    if (!conflicts?.untrackedCount) return;
+    setConfirmRemoval(false);
+    setRemoving(true);
+    try {
+      const result = await window.studio.backend<PackageBackupResult>(
+        "mods.backupPackages",
+        { paths: conflicts.untracked.map((entry) => entry.path) }
+      );
+      onInfoNotice(
+        `Moved ${result.movedCount} package${result.movedCount === 1 ? "" : "s"} to ${result.backupDirectory}.`
+      );
+      onConflicts(await window.studio.backend<AddonConflictReport>("mods.addonConflicts"));
+    } catch (error) {
+      onNotice(errorMessage(error));
+    } finally {
+      setRemoving(false);
+    }
+  }
+
+  // Decompiles one sound out of the inspected mod so it can be heard without
+  // installing the mod and playing until it triggers.
+  async function auditionSound(entry: ModEntry) {
+    if (!report) return;
+    setAuditioning(entry.path);
+    try {
+      const metadata = await window.studio.backend<AudioMetadata>("mods.previewSound", {
+        path: report.path,
+        internalPath: entry.path
+      });
+      if (!metadata.previewPath) {
+        throw new Error("The sound could not be decoded for preview.");
+      }
+      setAudition({
+        path: entry.path,
+        url: await window.studio.mediaUrl(metadata.previewPath)
+      });
+    } catch (error) {
+      onNotice(errorMessage(error));
+    } finally {
+      setAuditioning(null);
+    }
+  }
 
   // Rolls the mods that share no loaded file into a single package. Written
   // wherever the user chooses, never into the addons folder: the app does not
@@ -3238,6 +3293,49 @@ function InstalledModsPage({
                   ))}
                 </ul>
               </>
+            )}
+
+            {conflicts.untrackedCount > 0 && (
+              <div className="installed-remap installed-untracked">
+                <div className="section-heading">
+                  <div>
+                    <h3>
+                      {conflicts.untrackedCount} package
+                      {conflicts.untrackedCount === 1 ? "" : "s"} Deadlock Mod Manager does not
+                      know about
+                    </h3>
+                    <p>
+                      The manager renames a mod's file when you switch it off, so the copy the
+                      game actually loads can be left behind under its old name. These are
+                      loading right now whatever the manager shows.
+                    </p>
+                  </div>
+                  <button
+                    disabled={removing}
+                    onClick={() => setConfirmRemoval(true)}
+                  >
+                    <Trash2 size={15} /> Move to backup
+                  </button>
+                </div>
+                <ul className="installed-mod-examples installed-merge-list">
+                  {conflicts.untracked.map((entry) => (
+                    <li key={entry.path}>
+                      <code>{entry.filename}</code>
+                      <small>
+                        {entry.entryCount.toLocaleString()} files · {formatBytes(entry.sizeBytes)}
+                      </small>
+                    </li>
+                  ))}
+                </ul>
+                <p className="installed-hint">
+                  <Info size={13} />
+                  <span>
+                    Nothing is deleted. Each file is moved into this app's backup folder, outside
+                    the game directory so Source 2 cannot load it, and you are told exactly where
+                    it went. Move it back if you want it again.
+                  </span>
+                </p>
+              </div>
             )}
 
             {conflicts.mergeableCount >= 2 && (
@@ -3558,15 +3656,54 @@ function InstalledModsPage({
                   <code>{entry.path}</code>
                   <span>{describeKind(entry.kind)}</span>
                   <span>{formatBytes(entry.sizeBytes)}</span>
+                  {entry.kind === "sound" ? (
+                    <button
+                      className="entry-audition"
+                      disabled={auditioning !== null}
+                      title="Hear this sound"
+                      aria-label={`Play ${entry.path}`}
+                      onClick={() => void auditionSound(entry)}
+                    >
+                      {auditioning === entry.path ? (
+                        <RefreshCw size={13} className="spin" aria-hidden="true" />
+                      ) : (
+                        <Play size={13} aria-hidden="true" />
+                      )}
+                    </button>
+                  ) : (
+                    <span />
+                  )}
                 </li>
               ))}
             </ul>
+            {audition && (
+              <div className="entry-audition-player">
+                <code>{audition.path}</code>
+                {/* Decompiled to the preview cache, so this plays the mod's
+                    own sound rather than the one it replaces. */}
+                <audio src={audition.url} controls autoPlay />
+                <button onClick={() => setAudition(null)} aria-label="Close preview">
+                  <X size={14} />
+                </button>
+              </div>
+            )}
             {report.entryCount > 200 && (
               <p className="overview-more">and {report.entryCount - 200} more entries</p>
             )}
           </>
         )}
       </section>
+      )}
+
+      {confirmRemoval && conflicts && (
+        <ConfirmDialog
+          title={`Move ${conflicts.untrackedCount} package${conflicts.untrackedCount === 1 ? "" : "s"} out of the addons folder?`}
+          body="Each file is moved into this app's backup folder, not deleted, and you will be told where it went. Deadlock Mod Manager does not track these, so it will not notice them leaving."
+          confirmLabel="Move to backup"
+          busy={removing}
+          onConfirm={() => void removeUntracked()}
+          onCancel={() => setConfirmRemoval(false)}
+        />
       )}
     </div>
   );

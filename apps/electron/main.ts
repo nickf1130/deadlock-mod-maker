@@ -429,7 +429,11 @@ function registerIpc(): void {
         }
         params[key] = canonical;
       }
-      if (method === "mods.inspect" || method === "packages.extract") {
+      if (
+        method === "mods.inspect" ||
+        method === "packages.extract" ||
+        method === "mods.previewSound"
+      ) {
         const value = params?.path;
         if (typeof value !== "string") {
           throw new Error("Package path must be a string");
@@ -443,7 +447,11 @@ function registerIpc(): void {
       if (
         method === "packages.inspect" ||
         method === "packages.combine" ||
-        method === "mods.compare"
+        method === "mods.compare" ||
+        // Moves files out of the game folder, so it gets the same treatment as
+        // every other path the backend is handed: nothing the user did not pick
+        // or that a scan did not surface.
+        method === "mods.backupPackages"
       ) {
         const values = params?.paths;
         if (!Array.isArray(values) || values.length === 0) {

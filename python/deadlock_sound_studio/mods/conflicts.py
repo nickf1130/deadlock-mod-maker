@@ -160,6 +160,10 @@ class InstalledPackage:
     # The manager's display name, when it could be resolved.
     mod_name: str | None = None
     enabled: bool = True
+    # Whether a mod manager claims this file. Only meaningful when one is
+    # actually present: without a manager every package is managed by hand, so
+    # singling any of them out would be noise. Hence the default.
+    tracked: bool = True
     # Set when the package could not be read; it is reported rather than
     # skipped so a corrupt mod does not just vanish from the results.
     error: str | None = None
@@ -173,6 +177,7 @@ class InstalledPackage:
             "modId": self.mod_id,
             "modName": self.mod_name,
             "enabled": self.enabled,
+            "tracked": self.tracked,
             "error": self.error,
         }
 
@@ -238,6 +243,22 @@ class ConflictReport:
     def unreadable(self) -> list[InstalledPackage]:
         return [package for package in self.packages if package.error]
 
+    @property
+    def untracked(self) -> list[InstalledPackage]:
+        """Packages the mod manager does not know about.
+
+        Uninstalling through Deadlock Mod Manager does not always remove the
+        installed copy. The manager renames a mod's file when it is switched
+        off, so the folder can end up holding both the renamed copy the manager
+        tracks *and* the original the game still loads. The manager then shows
+        the mod as off while it is very much on, which is a confusing way to
+        lose an afternoon.
+
+        Empty when no manager is present, because then nothing is being tracked
+        and every package is deliberate.
+        """
+        return [package for package in self.packages if not package.tracked]
+
     def as_payload(self) -> dict[str, object]:
         return {
             "directory": str(self.directory),
@@ -250,6 +271,8 @@ class ConflictReport:
             "modConflictCount": len(self.mod_conflicts),
             "mergeableCount": len(self.mergeable),
             "mergeable": [package.as_payload() for package in self.mergeable],
+            "untrackedCount": len(self.untracked),
+            "untracked": [package.as_payload() for package in self.untracked],
             "unreadableCount": len(self.unreadable),
             "packages": [package.as_payload() for package in self.packages],
             "conflicts": [conflict.as_payload() for conflict in self.conflicts],
@@ -290,9 +313,11 @@ def find_addon_conflicts(directory: Path) -> ConflictReport:
 
     for package_path in _package_files(addons):
         filename = package_path.name
-        mod_id = (manager.owner(filename) if manager else None) or filename
+        owner = manager.owner(filename) if manager else None
+        mod_id = owner or filename
         mod_name = manager.name(mod_id) if manager else None
         enabled = manager.is_enabled(filename) if manager else True
+        tracked = manager is None or owner is not None
 
         try:
             entries = list_vpk(package_path)
@@ -306,6 +331,7 @@ def find_addon_conflicts(directory: Path) -> ConflictReport:
                     mod_id=mod_id,
                     mod_name=mod_name,
                     enabled=enabled,
+                    tracked=tracked,
                     error=str(error),
                 )
             )
@@ -319,6 +345,7 @@ def find_addon_conflicts(directory: Path) -> ConflictReport:
                 mod_id=mod_id,
                 mod_name=mod_name,
                 enabled=enabled,
+                tracked=tracked,
             )
         )
         # A disabled mod is still on disk but never mounted, so it cannot take

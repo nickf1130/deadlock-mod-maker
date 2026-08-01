@@ -109,6 +109,22 @@ export type BrowsableAsset = {
   filename: string;
 };
 
+/** One package moved out of the addons folder by `mods.backupPackages`. */
+export type MovedPackage = {
+  originalPath: string;
+  backupPath: string;
+  filename: string;
+  sizeBytes: number;
+};
+
+/** Result of `mods.backupPackages`. Packages are moved, never deleted. */
+export type PackageBackupResult = {
+  backupDirectory: string;
+  movedCount: number;
+  movedBytes: number;
+  moved: MovedPackage[];
+};
+
 export type SoundAsset = {
   id: string;
   internalPath: string;
@@ -504,6 +520,12 @@ export type InstalledPackage = {
   modName: string | null;
   /** Disabled mods stay on disk but are never loaded, so they cannot conflict. */
   enabled: boolean;
+  /**
+   * Whether a mod manager claims this file. Always true when no manager is
+   * present, since then every package is managed by hand and singling any out
+   * would be noise.
+   */
+  tracked: boolean;
   /** Set when the package could not be read; it is reported rather than skipped. */
   error: string | null;
 };
@@ -541,6 +563,13 @@ export type AddonConflictReport = {
   /** Enabled packages sharing no loaded file, so merging them loses nothing. */
   mergeableCount: number;
   mergeable: InstalledPackage[];
+  /**
+   * Packages in the addons folder the mod manager does not know about, usually
+   * the installed copy of a mod it believes is switched off. Empty when no
+   * manager is present.
+   */
+  untrackedCount: number;
+  untracked: InstalledPackage[];
   unreadableCount: number;
   packages: InstalledPackage[];
   conflicts: AddonConflict[];

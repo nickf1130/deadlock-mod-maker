@@ -18,9 +18,15 @@ Two questions are answered here:
     "Can I combine these two mods?" Compares any two packages and reports the
     paths they share.
 
-No module here compiles anything or writes to the game folder.
+``cleanup``
+    "Why is this mod still loading?" Moves packages a mod manager has lost
+    track of out of the addons folder. The one module here that writes to the
+    game folder, and even then it only ever moves a file into a backup.
+
+No module here compiles anything.
 """
 
+from .cleanup import BackupResult, MovedPackage, move_packages_to_backup
 from .comparison import ComparedPackage, ComparisonReport, SharedPath, compare_mod_packages
 from .conflicts import (
     Conflict,
@@ -35,6 +41,9 @@ from .conflicts import (
 from .inspection import ModEntry, ModPackageReport, inspect_mod_package, suggest_project_name
 
 __all__ = [
+    "BackupResult",
+    "MovedPackage",
+    "move_packages_to_backup",
     "ComparedPackage",
     "ComparisonReport",
     "SharedPath",
