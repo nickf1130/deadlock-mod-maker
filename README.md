@@ -10,8 +10,6 @@ Deadlock Mods are currently a gray area; use this and related tools at your own 
 
 > NOTE: Deadlock Mod Maker is a project made by me alone and is in no way affiliated with Valve or related projects.
 
----
-
 ## What it does
 
 - Searches Deadlock's sounds without unpacking the game. The preview Visuals workspace can also
@@ -25,8 +23,6 @@ Deadlock Mods are currently a gray area; use this and related tools at your own 
 
 **It never modifies your Deadlock installation.** It only reads the game files and writes new
 mod files into its own folder. Installing the finished mod is a manual step you do yourself.
-
----
 
 ## Install
 
@@ -78,8 +74,6 @@ The app now reads Deadlock's archive and builds a searchable index. This takes a
 first time and only happens once. A progress bar shows what it is doing. On a game update, this archive may need
 to rebuild.
 
----
-
 ## Make your first mod
 
 1. **Create a project.** Go to **Projects**, type a name (for example `my first mod`), and click
@@ -94,8 +88,6 @@ to rebuild.
 6. **Build it.** Go back to **Projects**, then click **Build & export**, then **Process project**.
 7. **Collect the file.** When it finishes you will see **Export complete**. Click **Open export
    folder** - your `.vpk` is inside.
-
----
 
 ## Install the finished mod into Deadlock
 
@@ -169,8 +161,6 @@ the current file and opens the export dialog so you can build a fresh `.vpk`.
 
 Anything it cannot match automatically is listed for you to fix by hand.
 
----
-
 ## Troubleshooting
 
 **"Windows protected your PC"**
@@ -195,8 +185,6 @@ See [When Deadlock updates](#when-deadlock-updates) above.
 Open an issue on the [issue tracker](https://github.com/nickf1130/deadlock-mod-maker/issues) and
 include the contents of the `logs` folder next to the `.exe`.
 
----
-
 ## What you supply, and what the app downloads
 
 | Tool | Where it comes from |
@@ -210,8 +198,6 @@ Downloads only ever start when you press that button. Each one must come from it
 GitHub release over HTTPS and must match the SHA-256 digest that release publishes; anything that
 fails either check is discarded instead of installed. Verified tools are installed into the app's
 own `tools` folder.
-
----
 
 ## Building from source
 
@@ -246,8 +232,6 @@ npm run dist
 
 `npm run dist` creates a clean Python environment before packaging, verifies the
 portable layout, and writes a `.sha256` checksum beside the executable.
-
----
 
 ## Licence
 
