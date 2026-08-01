@@ -3442,39 +3442,80 @@ input[type="radio"] {
   list-style: none;
 }
 
+/* One conflict reads top to bottom: what is wrong, who is involved, which
+   files. Mod names were previously amber pills at 10px holding up to fifty
+   characters - a shape meant for one-word tags, asked to hold a sentence. */
 .installed-mod-conflicts > li {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 6px 14px;
-  padding: 12px 14px;
+  gap: 10px;
+  padding: 13px 15px;
   background: #111111;
   border: 1px solid var(--border-soft);
   border-radius: 8px;
 }
 
-.installed-mod-pair {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-items: center;
-  min-width: 0;
-}
-
-.installed-mod-pair em {
-  padding: 3px 9px;
+/* The only amber on the row. The mods are not the problem; the overlap is. */
+.conflict-summary {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  margin: 0;
   color: var(--warning);
-  background: rgba(251, 191, 36, 0.1);
-  border: 1px solid rgba(251, 191, 36, 0.28);
-  border-radius: 999px;
-  font-size: 10px;
-  font-style: normal;
+  font-size: 12px;
+  line-height: 1.45;
 }
 
-.installed-mod-count {
-  flex: 0 0 auto;
+.conflict-summary strong {
+  font-weight: 600;
+}
+
+.conflict-mods {
+  display: grid;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  background: var(--border-soft);
+  border: 1px solid var(--border-soft);
+  border-radius: 7px;
+  overflow: hidden;
+}
+
+/* Name and bookkeeping on one line, the name given the room. Wraps to two
+   lines rather than truncating: a mod you cannot read the name of is the
+   thing this whole panel exists to tell you about. */
+.conflict-mods > li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px 14px;
+  align-items: baseline;
+  padding: 9px 12px;
+  background: #141414;
+}
+
+.conflict-mod-name {
+  color: #e5e5e5;
+  font-size: 13px;
+  font-weight: 550;
+  overflow-wrap: anywhere;
+}
+
+.conflict-mod-detail {
   color: var(--muted);
-  font-size: 10px;
-  white-space: nowrap;
+  font-size: 11px;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 720px) {
+  .conflict-mods > li {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .conflict-mod-detail {
+    text-align: left;
+  }
 }
 
 .installed-mod-examples {
@@ -3489,9 +3530,14 @@ input[type="radio"] {
 .installed-mod-examples code {
   overflow: hidden;
   color: #a3a3a3;
-  font-size: 10px;
+  font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* The row already spaces its parts; the list does not need to add to it. */
+.installed-mod-conflicts .installed-mod-examples {
+  margin: 0;
 }
 
 .installed-mod-examples li.muted {

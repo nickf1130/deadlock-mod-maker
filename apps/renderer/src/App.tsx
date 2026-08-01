@@ -50,6 +50,7 @@ import appIconUrl from "../../../build/icon.png";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { ResourceTree, useFolderBrowser } from "./components/ResourceTree";
+import { identifyMod } from "./modIdentity";
 import { StatusBadge } from "./components/StatusBadge";
 import { SoundTutorial } from "./components/SoundTutorial";
 import { WaveformPlayer } from "./components/WaveformPlayer";
@@ -2923,22 +2924,6 @@ function describePackage(entry: InstalledPackage, usesModManager: boolean): stri
   return `${entry.filename} (added by hand)`;
 }
 
-// Mod ids come from Deadlock Mod Manager and mean nothing on their own, so
-// show the packages the mod owns alongside it.
-function describeMod(modId: string, report: AddonConflictReport): string {
-  const packages = report.packages.filter((installed) => installed.modId === modId);
-  const owned = packages.map((installed) => installed.filename);
-  // Packages the manager does not track use their own filename as the id, so
-  // there is nothing to add by repeating it.
-  if (owned.length === 1 && owned[0] === modId) return modId;
-  if (!report.usesModManager || owned.length === 0) return modId;
-  // The manager's catalogue gives real titles; the id is only a fallback for
-  // mods it no longer lists.
-  const name = packages.find((installed) => installed.modName)?.modName;
-  if (name) return `${name} (${owned.join(", ")})`;
-  return `${owned.join(", ")} (added by hand)`;
-}
-
 // The backend groups Panorama markup, styles and script under one "ui" kind.
 // "ui" on its own is jargon; "HUD" is what the mod pages call these.
 function describeKind(kind: string): string {
@@ -3269,14 +3254,32 @@ function InstalledModsPage({
                 <ul className="installed-mod-conflicts">
                   {conflicts.modConflicts.map((pair) => (
                     <li key={pair.modIds.join("+")}>
-                      <div className="installed-mod-pair">
-                        {pair.modIds.map((modId) => (
-                          <em key={modId}>{describeMod(modId, conflicts)}</em>
-                        ))}
-                      </div>
-                      <span className="installed-mod-count">
-                        {pair.pathCount} file{pair.pathCount === 1 ? "" : "s"}
-                      </span>
+                      {/* The warning belongs on the finding, not on the mods.
+                          Colouring their names amber reads as "these mods are
+                          bad", when the problem is only that they overlap. */}
+                      <p className="conflict-summary">
+                        <ShieldAlert size={14} aria-hidden="true" />
+                        <span>
+                          <strong>{pair.modIds.length} mods</strong> replace the same{" "}
+                          <strong>
+                            {pair.pathCount} file{pair.pathCount === 1 ? "" : "s"}
+                          </strong>
+                          . Only one of them will apply.
+                        </span>
+                      </p>
+                      <ol className="conflict-mods">
+                        {pair.modIds.map((modId) => {
+                          const mod = identifyMod(modId, conflicts);
+                          return (
+                            <li key={modId}>
+                              <span className="conflict-mod-name">{mod.title}</span>
+                              {mod.detail && (
+                                <span className="conflict-mod-detail">{mod.detail}</span>
+                              )}
+                            </li>
+                          );
+                        })}
+                      </ol>
                       <ul className="installed-mod-examples">
                         {pair.examplePaths.map((example) => (
                           <li key={example}>
