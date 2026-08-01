@@ -89,6 +89,26 @@ export type SoundCategory =
   | "general"
   | "unclassified";
 
+/**
+ * One folder of an indexed catalogue, from `sounds.folders` / `visuals.folders`.
+ * Only folders that directly hold at least one file are reported — the game
+ * ships ~79,000 sounds in ~740 folders, so the whole skeleton is one small
+ * payload, and a folder's files are fetched only when it is opened.
+ */
+export type CatalogFolder = {
+  /** Archive-internal folder path; empty string for files at the very top. */
+  folder: string;
+  /** Files directly inside, not counting subfolders. */
+  fileCount: number;
+};
+
+/** What the folder tree needs of a file, and all both catalogues have in common. */
+export type BrowsableAsset = {
+  id: string;
+  internalPath: string;
+  filename: string;
+};
+
 export type SoundAsset = {
   id: string;
   internalPath: string;

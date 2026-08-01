@@ -8,6 +8,7 @@ import {
   Box,
   Check,
   ChevronDown,
+  ChevronRight,
   ChevronUp,
   CircleAlert,
   Copy,
@@ -15,6 +16,7 @@ import {
   ExternalLink,
   FileArchive,
   FileAudio,
+  Folder,
   FolderOpen,
   GitCompare,
   Gauge,
@@ -46,6 +48,7 @@ import {
 import appIconUrl from "../../../build/icon.png";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { flushSync } from "react-dom";
+import { ResourceTree, useFolderBrowser } from "./components/ResourceTree";
 import { StatusBadge } from "./components/StatusBadge";
 import { SoundTutorial } from "./components/SoundTutorial";
 import { WaveformPlayer } from "./components/WaveformPlayer";
@@ -58,6 +61,8 @@ import type {
   AudioMetadata,
   AppInfo,
   Bootstrap,
+  BrowsableAsset,
+  CatalogFolder,
   BuildProgress,
   BuildResult,
   CompatibilityReport,
@@ -993,6 +998,7 @@ function Metric({ label, value, detail }: { label: string; value: string; detail
   );
 }
 
+
 function SoundBrowser({
   diagnostics,
   soundCount,
@@ -1017,6 +1023,20 @@ function SoundBrowser({
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState<"all" | "heroes" | "general">("all");
   const [category, setCategory] = useState<string>("");
+  // Browsing state. The tree is the default view; searching replaces it until
+  // the box is cleared, because a ranked flat list is the better answer to a
+  // query and the worse answer to "show me what is in here".
+  const [folders, setFolders] = useState<CatalogFolder[]>([]);
+  const [searchActive, setSearchActive] = useState(false);
+  const browser = useFolderBrowser<SoundAsset>(
+    (folder) =>
+      window.studio.backend<SoundAsset[]>("sounds.browse", {
+        folder,
+        category: category || undefined,
+        scope
+      }),
+    onNotice
+  );
   const [selected, setSelected] = useState<SoundAsset | null>(null);
   const [operation, setOperation] = useState<string | null>(null);
   const loading = Boolean(operation);
@@ -1031,21 +1051,46 @@ function SoundBrowser({
   const [looping, setLooping] = useState<LoopSettings>({ ...DEFAULT_LOOP });
 
   const search = useCallback(async () => {
+    if (!query.trim()) {
+      // An empty box means "show me everything", which is what the tree is for.
+      setSearchActive(false);
+      return;
+    }
     setOperation("Searching indexed sounds…");
     try {
       const result = await window.studio.backend<SoundAsset[]>("sounds.search", {
         query,
         category: category || undefined,
         scope,
-        limit: 350
+        limit: 1000
       });
       setSounds(result);
+      setSearchActive(true);
     } catch (error) {
       onNotice(errorMessage(error));
     } finally {
       setOperation(null);
     }
   }, [query, category, scope]);
+
+  // The folder skeleton is one payload for the whole catalog - ~740 folders for
+  // ~79,000 sounds - so it is cheap to refetch whenever the filters change.
+  const loadFolders = useCallback(async () => {
+    setOperation("Reading the sound catalog…");
+    try {
+      setFolders(
+        await window.studio.backend<CatalogFolder[]>("sounds.folders", {
+          category: category || undefined,
+          scope
+        })
+      );
+      browser.forgetFiles();
+    } catch (error) {
+      onNotice(errorMessage(error));
+    } finally {
+      setOperation(null);
+    }
+  }, [category, scope]);
 
   const loadIndexHistory = useCallback(async () => {
     try {
@@ -1060,7 +1105,8 @@ function SoundBrowser({
   }, []);
 
   useEffect(() => {
-    void search();
+    void loadFolders();
+    if (searchActive) void search();
   }, [scope, category]);
 
   useEffect(() => {
@@ -1240,7 +1286,12 @@ function SoundBrowser({
             <Search size={16} />
             <input
               value={query}
-              onChange={(event) => setQuery(event.target.value)}
+              onChange={(event) => {
+                setQuery(event.target.value);
+                // Clearing the box drops straight back to the tree, with no
+                // need to press anything.
+                if (!event.target.value.trim()) setSearchActive(false);
+              }}
               onKeyDown={(event) => event.key === "Enter" && void search()}
               placeholder="Filename, path, hero, ability, event…"
             />
@@ -1269,7 +1320,13 @@ function SoundBrowser({
         </div>
         <ActivityBar active={loading} label={operation ?? ""} />
         <div className="list-summary">
-          <span>{sounds.length} shown · {soundCount.toLocaleString()} indexed · {indexHistory.length} catalog version{indexHistory.length === 1 ? "" : "s"}</span>
+          <span>
+            {searchActive
+              ? `${sounds.length.toLocaleString()} matching`
+              : `${folders.length.toLocaleString()} folders`}{" "}
+            · {soundCount.toLocaleString()} indexed · {indexHistory.length} catalog version
+            {indexHistory.length === 1 ? "" : "s"}
+          </span>
           <button onClick={() => void indexSounds()} disabled={!diagnostics.canIndex || loading}>
             <RefreshCw size={14} /> {soundCount ? "Re-index archive" : "Index archive"}
           </button>
@@ -1289,32 +1346,52 @@ function SoundBrowser({
           </details>
         )}
         <div className="asset-list">
-          {sounds.map((sound) => (
-            <button
-              key={sound.id}
-              className={selected?.id === sound.id ? "selected" : ""}
-              onClick={() => void chooseSound(sound)}
-            >
-              <span className="asset-icon">
-                <AudioLines size={16} />
-              </span>
-              <span className="asset-main">
-                <strong>{sound.filename}</strong>
-                <small>{sound.internalPath}</small>
-              </span>
-              <span className="asset-tags">
-                {sound.heroName && (
-                  <span title={`Hero: ${sound.heroName}`} aria-label={`Hero: ${sound.heroName}`}>
-                    <UserRound size={13} aria-hidden="true" />
-                  </span>
-                )}
-                <span title={`Category: ${sound.category}`} aria-label={`Category: ${sound.category}`}>
-                  <Tag size={13} aria-hidden="true" />
+          {searchActive &&
+            sounds.map((sound) => (
+              <button
+                key={sound.id}
+                className={selected?.id === sound.id ? "selected" : ""}
+                onClick={() => void chooseSound(sound)}
+              >
+                <span className="asset-icon">
+                  <AudioLines size={16} />
                 </span>
-              </span>
-            </button>
-          ))}
-          {!sounds.length && (
+                <span className="asset-main">
+                  <strong>{sound.filename}</strong>
+                  <small>{sound.internalPath}</small>
+                </span>
+                <span className="asset-tags">
+                  {sound.heroName && (
+                    <span title={`Hero: ${sound.heroName}`} aria-label={`Hero: ${sound.heroName}`}>
+                      <UserRound size={13} aria-hidden="true" />
+                    </span>
+                  )}
+                  <span title={`Category: ${sound.category}`} aria-label={`Category: ${sound.category}`}>
+                    <Tag size={13} aria-hidden="true" />
+                  </span>
+                </span>
+              </button>
+            ))}
+          {!searchActive && folders.length > 0 && (
+            <ResourceTree
+              folders={folders}
+              filesByFolder={browser.filesByFolder}
+              openFolders={browser.openFolders}
+              loadingFolders={browser.loadingFolders}
+              selectedId={selected?.id ?? null}
+              onToggle={(folder) => void browser.toggleFolder(folder)}
+              onSelect={(sound) => void chooseSound(sound)}
+              icon={AudioLines}
+              renderTags={(sound) =>
+                sound.heroName ? (
+                  <span className="tree-tag" title={`Hero: ${sound.heroName}`}>
+                    <UserRound size={12} aria-hidden="true" />
+                  </span>
+                ) : null
+              }
+            />
+          )}
+          {((searchActive && !sounds.length) || (!searchActive && !folders.length)) && (
             <div className="empty">
               <AudioLines size={27} />
               <strong>{soundCount ? "No matching sounds" : "The local sound index is empty"}</strong>
@@ -1493,17 +1570,34 @@ function VisualBrowser({
   const [replacementPath, setReplacementPath] = useState<string | null>(null);
   const [replacement, setReplacement] = useState<VisualSourceMetadata | null>(null);
   const [replacementUrl, setReplacementUrl] = useState<string | null>(null);
+  // Same two-view arrangement as the sound browser: tree by default, flat
+  // ranked results while a search is running.
+  const [folders, setFolders] = useState<CatalogFolder[]>([]);
+  const [searchActive, setSearchActive] = useState(false);
+  const browser = useFolderBrowser<VisualResourceAsset>(
+    (folder) =>
+      window.studio.backend<VisualResourceAsset[]>("visuals.browse", {
+        folder,
+        kind: kind || undefined
+      }),
+    onNotice
+  );
 
   const search = useCallback(async () => {
+    if (!query.trim()) {
+      setSearchActive(false);
+      return;
+    }
     setOperation("Searching indexed visual resources…");
     try {
       setAssets(
         await window.studio.backend<VisualResourceAsset[]>("visuals.search", {
           query,
           kind: kind || undefined,
-          limit: 400
+          limit: 1000
         })
       );
+      setSearchActive(true);
     } catch (error) {
       onNotice(errorMessage(error));
     } finally {
@@ -1511,8 +1605,25 @@ function VisualBrowser({
     }
   }, [query, kind]);
 
+  const loadFolders = useCallback(async () => {
+    setOperation("Reading the visual catalog…");
+    try {
+      setFolders(
+        await window.studio.backend<CatalogFolder[]>("visuals.folders", {
+          kind: kind || undefined
+        })
+      );
+      browser.forgetFiles();
+    } catch (error) {
+      onNotice(errorMessage(error));
+    } finally {
+      setOperation(null);
+    }
+  }, [kind]);
+
   useEffect(() => {
-    void search();
+    void loadFolders();
+    if (searchActive) void search();
   }, [kind]);
 
   function chooseAsset(asset: VisualResourceAsset) {
@@ -1643,7 +1754,10 @@ function VisualBrowser({
             <Search size={16} />
             <input
               value={query}
-              onChange={(event) => setQuery(event.target.value)}
+              onChange={(event) => {
+                setQuery(event.target.value);
+                if (!event.target.value.trim()) setSearchActive(false);
+              }}
               onKeyDown={(event) => event.key === "Enter" && void search()}
               placeholder="Texture or material filename/path…"
             />
@@ -1666,24 +1780,43 @@ function VisualBrowser({
         </div>
         <ActivityBar active={Boolean(operation)} label={operation ?? ""} />
         <div className="list-summary">
-          <span>{assets.length.toLocaleString()} shown · {visualCount.toLocaleString()} indexed</span>
+          <span>
+            {searchActive
+              ? `${assets.length.toLocaleString()} matching`
+              : `${folders.length.toLocaleString()} folders`}{" "}
+            · {visualCount.toLocaleString()} indexed
+          </span>
         </div>
         <div className="asset-list">
-          {assets.map((asset) => (
-            <button
-              key={asset.id}
-              className={selected?.id === asset.id ? "selected" : ""}
-              onClick={() => chooseAsset(asset)}
-            >
-              <span className="asset-icon"><ImageIcon size={15} /></span>
-              <span className="asset-main">
-                <strong>{asset.filename}</strong>
-                <small>{asset.internalPath}</small>
-              </span>
-              <span className="asset-tags">{asset.kind}</span>
-            </button>
-          ))}
-          {!assets.length && (
+          {searchActive &&
+            assets.map((asset) => (
+              <button
+                key={asset.id}
+                className={selected?.id === asset.id ? "selected" : ""}
+                onClick={() => chooseAsset(asset)}
+              >
+                <span className="asset-icon"><ImageIcon size={15} /></span>
+                <span className="asset-main">
+                  <strong>{asset.filename}</strong>
+                  <small>{asset.internalPath}</small>
+                </span>
+                <span className="asset-tags">{asset.kind}</span>
+              </button>
+            ))}
+          {!searchActive && folders.length > 0 && (
+            <ResourceTree
+              folders={folders}
+              filesByFolder={browser.filesByFolder}
+              openFolders={browser.openFolders}
+              loadingFolders={browser.loadingFolders}
+              selectedId={selected?.id ?? null}
+              onToggle={(folder) => void browser.toggleFolder(folder)}
+              onSelect={chooseAsset}
+              icon={ImageIcon}
+              renderTags={(asset) => <span className="tree-tag">{asset.kind}</span>}
+            />
+          )}
+          {((searchActive && !assets.length) || (!searchActive && !folders.length)) && (
             <div className="empty compact">
               <ImageIcon size={25} />
               <strong>No visual resources found</strong>

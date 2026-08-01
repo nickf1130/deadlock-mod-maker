@@ -14,6 +14,63 @@ from ..models import (
 )
 from ..paths import AppPaths
 
+# Matches rows sitting *directly* inside a folder, given the three values
+# :func:`_child_bounds` produces.
+#
+# Two things are going on, and both were chosen over the obvious alternative:
+#
+# The range comparison, not ``LIKE 'folder/%'``
+#     LIKE would be readable, but ``_`` is a LIKE wildcard matching any single
+#     character, and game paths are full of underscores. Asking for
+#     ``sounds/vo/hero_one/%`` also returns ``sounds/vo/heroXone/`` - a real
+#     folder's files leaking into a sibling's listing. Escaping fixes the
+#     correctness but costs the index: SQLite cannot use its LIKE optimisation
+#     when an ESCAPE clause is present. A range comparison has neither problem.
+#
+# instr(...) = 0, not a second NOT LIKE
+#     Once the range has narrowed to the subtree, a row belongs to this folder
+#     only if what follows the prefix contains no further separator. Same
+#     reasoning: exact, and no wildcards to escape.
+#
+# Together these read from the UNIQUE NOCASE index on internal_path, which
+# already exists - so browsing needs no schema change.
+_DIRECT_CHILD_CLAUSE = """
+    internal_path >= ? COLLATE NOCASE
+    AND internal_path < ? COLLATE NOCASE
+    AND instr(substr(internal_path, ?), '/') = 0
+"""
+
+# The character immediately after "/", which closes the range over one folder's
+# subtree: everything from "folder/" up to but not including "folder0".
+_AFTER_SEPARATOR = "0"
+
+
+def folder_of(internal_path: str) -> str:
+    """The folder holding ``internal_path``; empty for a path at the root."""
+    head, separator, _ = internal_path.rpartition("/")
+    return head if separator else ""
+
+
+def _child_bounds(folder: str) -> tuple[str, str, int]:
+    """Range bounds and substring offset for the children of ``folder``.
+
+    The offset is 1-based because it is handed to SQLite's ``substr``.
+    """
+    prefix = f"{folder}/" if folder else ""
+    high = f"{folder}{_AFTER_SEPARATOR}" if folder else "￿"
+    return prefix, high, len(prefix) + 1
+
+
+def _folder_counts(paths: Iterable[str]) -> list[dict[str, object]]:
+    """Count files per folder, sorted by path."""
+    counts: dict[str, int] = {}
+    for path in paths:
+        folder = folder_of(path)
+        counts[folder] = counts.get(folder, 0) + 1
+    return [
+        {"folder": folder, "fileCount": counts[folder]} for folder in sorted(counts)
+    ]
+
 
 class Database:
     def __init__(self, paths: AppPaths):
@@ -164,6 +221,59 @@ class Database:
         ).fetchall()
         return [self._asset(row) for row in rows]
 
+    def list_sound_folders(
+        self, category: str | None = None, *, scope: str = "all"
+    ) -> list[dict[str, object]]:
+        """Every folder that directly holds a sound, with how many it holds.
+
+        This is the whole tree in one query. The game ships ~79,000 sounds but
+        only ~740 folders, so the caller gets a skeleton small enough to send
+        and draw at once, then asks for a folder's files only when it is opened.
+
+        Folders that hold nothing directly (``sounds/vo`` is only ever a parent)
+        are absent, because nothing here knows they exist. The caller rebuilds
+        them from the path segments - see the note in :func:`folder_of`.
+        """
+        rows = self.connection.execute(
+            """
+            SELECT * FROM sound_assets
+            WHERE (?='' OR category=?)
+            AND (
+              ?='all'
+              OR (?='heroes' AND hero_name IS NOT NULL)
+              OR (?='general' AND hero_name IS NULL)
+            )
+            """,
+            (category or "", category or "", scope, scope, scope),
+        ).fetchall()
+        return _folder_counts(row["internal_path"] for row in rows)
+
+    def sound_assets_in_folder(
+        self, folder: str, category: str | None = None, *, scope: str = "all"
+    ) -> list[SoundAsset]:
+        """Sounds sitting directly in ``folder``, never those in a subfolder.
+
+        Deliberately unlimited: a folder is its own limit. The largest in the
+        game holds 1,477 files, which is a reasonable amount to hand over at
+        once and far below what a flat listing of everything would cost.
+        """
+        low, high, offset = _child_bounds(folder)
+        rows = self.connection.execute(
+            f"""
+            SELECT * FROM sound_assets
+            WHERE {_DIRECT_CHILD_CLAUSE}
+            AND (?='' OR category=?)
+            AND (
+              ?='all'
+              OR (?='heroes' AND hero_name IS NOT NULL)
+              OR (?='general' AND hero_name IS NULL)
+            )
+            ORDER BY filename COLLATE NOCASE
+            """,
+            (low, high, offset, category or "", category or "", scope, scope, scope),
+        ).fetchall()
+        return [self._asset(row) for row in rows]
+
     def count_assets(self) -> int:
         return int(self.connection.execute("SELECT COUNT(*) FROM sound_assets").fetchone()[0])
 
@@ -230,6 +340,30 @@ class Database:
                 wildcard,
                 min(max(limit, 1), 1000),
             ),
+        ).fetchall()
+        return [self._visual_asset(row) for row in rows]
+
+    def list_visual_folders(self, kind: str | None = None) -> list[dict[str, object]]:
+        """Folder skeleton for textures and materials. See list_sound_folders."""
+        rows = self.connection.execute(
+            "SELECT internal_path FROM visual_assets WHERE (?='' OR kind=?)",
+            (kind or "", kind or ""),
+        ).fetchall()
+        return _folder_counts(row["internal_path"] for row in rows)
+
+    def visual_assets_in_folder(
+        self, folder: str, kind: str | None = None
+    ) -> list[VisualResourceAsset]:
+        """Textures and materials sitting directly in ``folder``."""
+        low, high, offset = _child_bounds(folder)
+        rows = self.connection.execute(
+            f"""
+            SELECT * FROM visual_assets
+            WHERE {_DIRECT_CHILD_CLAUSE}
+            AND (?='' OR kind=?)
+            ORDER BY filename COLLATE NOCASE
+            """,
+            (low, high, offset, kind or "", kind or ""),
         ).fetchall()
         return [self._visual_asset(row) for row in rows]
 

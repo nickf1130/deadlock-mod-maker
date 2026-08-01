@@ -28,8 +28,12 @@ export type BackendMethod =
   | "sounds.index"
   | "sounds.indexHistory"
   | "sounds.search"
+  | "sounds.folders"
+  | "sounds.browse"
   | "sounds.preview"
   | "visuals.search"
+  | "visuals.folders"
+  | "visuals.browse"
   | "visuals.preview"
   | "visuals.inspectSource"
   | "projects.confirmVisualReplacement"
@@ -75,8 +79,12 @@ export const BACKEND_ALLOWLIST = new Set<BackendMethod>([
   "sounds.index",
   "sounds.indexHistory",
   "sounds.search",
+  "sounds.folders",
+  "sounds.browse",
   "sounds.preview",
   "visuals.search",
+  "visuals.folders",
+  "visuals.browse",
   "visuals.preview",
   "visuals.inspectSource",
   "projects.confirmVisualReplacement",

@@ -51,19 +51,18 @@ python/backups/
 python/tools/
 python/.tool-probe/
 
-# Internal design notes. Delete this line to publish them; see README.
 /docs/
 
-# Game archives and mod output. Never commit Valve content.
+# Unbuilt feature notes, kept local so the repo does not promise them.
+/ROADMAP.md
+
 *.vpk
 *.pak
 
-# Local environment and secrets
 .env
 .env.*
 !.env.example
 
-# Editors and OS
 .vscode/
 .idea/
 *.swp

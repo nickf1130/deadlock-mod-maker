@@ -706,6 +706,74 @@ input, select {
   box-shadow: inset 2px 0 #fafafa;
 }
 
+/* Folder tree for the sound and visual catalogs. Rows are deliberately shorter
+   and denser than .asset-list rows: a tree is for scanning structure, and the
+   full path is already implied by where the row sits. */
+.resource-tree, .resource-tree ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.resource-tree button {
+  width: 100%;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 5px 12px 5px 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  text-align: left;
+  min-height: 0;
+  font-size: 12.5px;
+}
+
+.resource-tree button:hover {
+  background: #161616;
+}
+
+.tree-folder {
+  color: #d4d4d4;
+  font-weight: 550;
+}
+
+.tree-folder svg:first-child {
+  color: #737373;
+  flex: none;
+}
+
+.tree-file {
+  color: #a3a3a3;
+}
+
+.tree-file.selected {
+  background: #171717;
+  color: #e5e5e5;
+  box-shadow: inset 2px 0 #fafafa;
+}
+
+.tree-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tree-count, .tree-tag {
+  color: #737373;
+  font-size: 11px;
+  flex: none;
+}
+
+.tree-loading {
+  color: #737373;
+  font-size: 11px;
+  padding: 5px 12px 5px 0;
+}
+
 .asset-icon {
   width: 28px;
   height: 28px;

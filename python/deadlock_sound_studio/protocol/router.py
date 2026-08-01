@@ -68,6 +68,29 @@ class AssetParams(ParamsModel):
     asset_id: str = Field(alias="assetId")
 
 
+# Browsing takes the same filters as searching, so the tree and the counts on
+# it always describe the same set of files the search box would return.
+class FolderListParams(ParamsModel):
+    category: str | None = None
+    scope: Literal["all", "heroes", "general"] = "all"
+
+
+class BrowseFolderParams(ParamsModel):
+    # Empty means the root, where the top-level folders live.
+    folder: str = ""
+    category: str | None = None
+    scope: Literal["all", "heroes", "general"] = "all"
+
+
+class VisualFolderListParams(ParamsModel):
+    kind: Literal["texture", "material"] | None = None
+
+
+class BrowseVisualFolderParams(ParamsModel):
+    folder: str = ""
+    kind: Literal["texture", "material"] | None = None
+
+
 class VisualSearchParams(ParamsModel):
     query: str = ""
     kind: Literal["texture", "material"] | None = None
@@ -245,8 +268,12 @@ class BackendRouter:
             "sounds.index": self.index_sounds,
             "sounds.indexHistory": self.index_history,
             "sounds.search": self.search_sounds,
+            "sounds.folders": self.sound_folders,
+            "sounds.browse": self.browse_sounds,
             "sounds.preview": self.preview_sound,
             "visuals.search": self.search_visuals,
+            "visuals.folders": self.visual_folders,
+            "visuals.browse": self.browse_visuals,
             "visuals.preview": self.preview_visual,
             "visuals.inspectSource": self.inspect_visual_source,
             "audio.inspect": self.inspect_audio,
@@ -619,6 +646,30 @@ class BackendRouter:
             for asset in self.database.search_assets(
                 params.query, params.category, params.limit, scope=params.scope
             )
+        ]
+
+    def sound_folders(self, raw: dict[str, Any]) -> list[dict[str, object]]:
+        params = FolderListParams.model_validate(raw)
+        return self.database.list_sound_folders(params.category, scope=params.scope)
+
+    def browse_sounds(self, raw: dict[str, Any]) -> list[dict[str, Any]]:
+        params = BrowseFolderParams.model_validate(raw)
+        return [
+            asset.model_dump(by_alias=True)
+            for asset in self.database.sound_assets_in_folder(
+                params.folder, params.category, scope=params.scope
+            )
+        ]
+
+    def visual_folders(self, raw: dict[str, Any]) -> list[dict[str, object]]:
+        params = VisualFolderListParams.model_validate(raw)
+        return self.database.list_visual_folders(params.kind)
+
+    def browse_visuals(self, raw: dict[str, Any]) -> list[dict[str, Any]]:
+        params = BrowseVisualFolderParams.model_validate(raw)
+        return [
+            asset.model_dump(by_alias=True)
+            for asset in self.database.visual_assets_in_folder(params.folder, params.kind)
         ]
 
     def search_visuals(self, raw: dict[str, Any]) -> list[dict[str, Any]]:
