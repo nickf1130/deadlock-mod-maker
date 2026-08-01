@@ -195,7 +195,8 @@ test("desktop shell exposes the consolidated roadmap workflow", async ({}, testI
       "PAK Combiner",
       "Installed Mods",
       "Inspect a Mod",
-      "Compare Mods"
+      "Compare Mods",
+      "Split a Mod"
     ]);
     await page.locator(".utility-tabs button", { hasText: "PAK Combiner" }).click();
     await expect(

@@ -6,7 +6,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..audio import inspect_audio, process_audio
+from ..audio import inspect_audio, process_audio, silence_processing, write_silence
 from ..batch import (
     preview_folder,
     preview_mapping_file,
@@ -26,7 +26,7 @@ from ..models import (
     Settings,
     VisualResourceKind,
 )
-from ..packages import RenameRule, combine_packages, inspect_packages
+from ..packages import RenameRule, combine_packages, extract_package, inspect_packages
 from ..paths import AppPaths
 from ..projects import ProjectService, detect_conflicts
 from ..requirements import install_missing_requirements
@@ -92,6 +92,11 @@ class AudioInspectParams(ParamsModel):
 class PreviewProcessedParams(ParamsModel):
     path: str
     processing: ProcessingSettings
+
+
+class SilenceParams(ParamsModel):
+    project_id: str = Field(alias="projectId")
+    asset_id: str = Field(alias="assetId")
 
 
 class ConfirmParams(ParamsModel):
@@ -188,6 +193,12 @@ class CombinePackagesParams(PackagePathsParams):
     renames: list[RenameRuleParams] = Field(default_factory=list)
 
 
+class ExtractPackageParams(ParamsModel):
+    path: str
+    output_path: str = Field(alias="outputPath")
+    internal_paths: list[str] = Field(alias="internalPaths", min_length=1)
+
+
 class ModPackageParams(ParamsModel):
     path: str
 
@@ -219,6 +230,7 @@ class BackendRouter:
             "projects.get": self.get_project,
             "projects.delete": self.delete_project,
             "projects.confirmReplacement": self.confirm_replacement,
+            "projects.silenceReplacement": self.silence_replacement,
             "projects.updateReplacement": self.update_replacement,
             "projects.replaceSource": self.replace_source,
             "projects.duplicateSettings": self.duplicate_settings,
@@ -250,6 +262,7 @@ class BackendRouter:
             "export.createCompatibilityCopy": self.create_compatibility_copy,
             "packages.inspect": self.inspect_packages,
             "packages.combine": self.combine_packages,
+            "packages.extract": self.extract_package,
             "mods.inspect": self.inspect_mod,
             "mods.addonConflicts": self.addon_conflicts,
             "mods.compare": self.compare_mods,
@@ -404,6 +417,35 @@ class BackendRouter:
             params.looping,
             _optional_path(ffprobe),
         ).model_dump(by_alias=True)
+
+    def silence_replacement(self, raw: dict[str, Any]) -> dict[str, Any]:
+        """Replace a sound with silence, so it stops playing in game.
+
+        Generates the silent source itself rather than asking for a file, then
+        confirms it through the ordinary replacement path so the build,
+        validation and conflict rules all still apply.
+        """
+        params = SilenceParams.model_validate(raw)
+        asset = self.database.get_asset(params.asset_id)
+        if not asset:
+            raise StudioError("ASSET_NOT_FOUND", "The indexed target sound no longer exists.")
+
+        # Written under the app's cache; confirm_replacement copies it into the
+        # project, so this copy is only needed for the length of the call.
+        source = self.paths.cache / "silence" / f"{params.asset_id}.wav"
+        write_silence(source, sample_rate=asset.sample_rate, channels=asset.channels)
+        try:
+            manifest = self.projects.confirm_replacement(
+                params.project_id,
+                params.asset_id,
+                source,
+                silence_processing(asset.sample_rate, asset.channels),
+                LoopSettings(),
+                _optional_path(self._diagnostics().resolved.ffprobe),
+            )
+        finally:
+            source.unlink(missing_ok=True)
+        return manifest.model_dump(by_alias=True)
 
     def confirm_visual_replacement(self, raw: dict[str, Any]) -> dict[str, Any]:
         params = ConfirmVisualParams.model_validate(raw)
@@ -821,6 +863,16 @@ class BackendRouter:
                 RenameRule(package=rule.package, source=rule.source, target=rule.target)
                 for rule in params.renames
             ],
+        )
+
+    def extract_package(self, raw: dict[str, Any]) -> dict[str, object]:
+        """Write a new package holding only the chosen files from another."""
+        params = ExtractPackageParams.model_validate(raw)
+        return extract_package(
+            Path(params.path),
+            Path(params.output_path),
+            params.internal_paths,
+            self.emit_event,
         )
 
     def inspect_mod(self, raw: dict[str, Any]) -> dict[str, object]:

@@ -16,6 +16,7 @@ export type BackendMethod =
   | "projects.get"
   | "projects.delete"
   | "projects.confirmReplacement"
+  | "projects.silenceReplacement"
   | "projects.updateReplacement"
   | "projects.replaceSource"
   | "projects.duplicateSettings"
@@ -47,6 +48,7 @@ export type BackendMethod =
   | "export.createCompatibilityCopy"
   | "packages.inspect"
   | "packages.combine"
+  | "packages.extract"
   | "mods.inspect"
   | "mods.addonConflicts"
   | "mods.compare";
@@ -61,6 +63,7 @@ export const BACKEND_ALLOWLIST = new Set<BackendMethod>([
   "projects.get",
   "projects.delete",
   "projects.confirmReplacement",
+  "projects.silenceReplacement",
   "projects.updateReplacement",
   "projects.replaceSource",
   "projects.duplicateSettings",
@@ -92,6 +95,7 @@ export const BACKEND_ALLOWLIST = new Set<BackendMethod>([
   "export.createCompatibilityCopy",
   "packages.inspect",
   "packages.combine",
+  "packages.extract",
   "mods.inspect",
   "mods.addonConflicts",
   "mods.compare"
@@ -102,7 +106,8 @@ const LONG_RUNNING_METHODS = new Set<BackendMethod>([
   "sounds.index",
   "app.bootstrap",
   "requirements.install",
-  "packages.combine"
+  "packages.combine",
+  "packages.extract"
 ]);
 
 function requestTimeout(method: BackendMethod): number {

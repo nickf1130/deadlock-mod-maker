@@ -544,8 +544,10 @@ export type SharedPath = {
   kind: string;
   filenames: string[];
   /**
-   * True when picking a winner is not enough. A Deadlock hero and their weapon
-   * share one .vmdl_c, so a model collision cannot be split by choosing files.
+   * True when picking a winner is not enough, because the file bundles several
+   * things separately. A Deadlock hero and their weapon share one .vmdl_c; a
+   * single Panorama stylesheet holds the crosshair *and* the hit marker. Those
+   * collisions cannot be split by choosing files.
    */
   inseparable: boolean;
 };

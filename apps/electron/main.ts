@@ -45,6 +45,12 @@ const approvedSelections = new Set<string>();
 const approvedOutputs = new Set<string>();
 let mainWindow: BrowserWindow | null = null;
 let worker: PythonWorker | null = null;
+// Where the package dialogs open. Mods live in the game's addons folder, so
+// starting anywhere else (Electron falls back to Downloads) means the user
+// navigates there by hand every time. Learned from backend results rather than
+// passed in by the renderer: this only chooses a starting folder, and every
+// path the user actually picks still goes through approveSelection.
+let addonsDirectory: string | null = null;
 let latestUpdate: UpdateInfo | null = null;
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 const uiSmoke = process.env.DSS_UI_SMOKE === "1";
@@ -274,6 +280,20 @@ function approveSelection(targetPath: string): string {
   return canonical;
 }
 
+// Derive `<deadlock>/game/citadel/addons` from a diagnostics report, matching
+// where Source 2 loads mods from. Silently does nothing when Deadlock has not
+// been located yet, in which case the dialogs keep their platform default.
+function rememberAddonsDirectory(resolved: { deadlockRoot?: unknown } | undefined): void {
+  const root = resolved?.deadlockRoot;
+  if (typeof root !== "string" || !root) {
+    return;
+  }
+  const addons = path.join(root, "game", "citadel", "addons");
+  if (existsSync(addons)) {
+    addonsDirectory = addons;
+  }
+}
+
 function canonicalOutput(targetPath: string): string {
   if (typeof targetPath !== "string" || !path.isAbsolute(targetPath)) {
     throw new Error("Output path must be absolute");
@@ -409,7 +429,22 @@ function registerIpc(): void {
         }
         params[key] = canonical;
       }
-      if (method === "packages.inspect" || method === "packages.combine") {
+      if (method === "mods.inspect" || method === "packages.extract") {
+        const value = params?.path;
+        if (typeof value !== "string") {
+          throw new Error("Package path must be a string");
+        }
+        const canonical = canonicalExisting(value);
+        if (!approvedSelections.has(canonical)) {
+          throw new Error("Package path was not selected by the user");
+        }
+        params.path = canonical;
+      }
+      if (
+        method === "packages.inspect" ||
+        method === "packages.combine" ||
+        method === "mods.compare"
+      ) {
         const values = params?.paths;
         if (!Array.isArray(values) || values.length === 0) {
           throw new Error("Choose at least one package file");
@@ -428,7 +463,7 @@ function registerIpc(): void {
           return canonical;
         });
       }
-      if (method === "packages.combine") {
+      if (method === "packages.combine" || method === "packages.extract") {
         const outputValue = params?.outputPath;
         if (typeof outputValue !== "string") {
           throw new Error("Missing approved output path");
@@ -465,7 +500,41 @@ function registerIpc(): void {
           }
         }
       }
-      if (method === "packages.combine" && result && typeof result === "object") {
+      if (
+        (method === "app.bootstrap" || method === "diagnostics.run") &&
+        result &&
+        typeof result === "object"
+      ) {
+        // diagnostics.run returns the report itself; app.bootstrap nests it.
+        const report = result as {
+          resolved?: { deadlockRoot?: unknown };
+          diagnostics?: { resolved?: { deadlockRoot?: unknown } };
+        };
+        rememberAddonsDirectory(report.resolved ?? report.diagnostics?.resolved);
+      }
+      if (method === "mods.addonConflicts" && result && typeof result === "object") {
+        // The scan reports the folder it actually read, which beats deriving
+        // one from the game root.
+        const directory = (result as { directory?: unknown }).directory;
+        if (typeof directory === "string" && existsSync(directory)) {
+          addonsDirectory = directory;
+        }
+        // The user asked to scan their addons folder, so the packages found
+        // there become operable. Combining them otherwise fails the approval
+        // check, because they never came from a file dialog.
+        const packages = (result as { packages?: Array<{ path?: unknown }> }).packages;
+        for (const entry of packages ?? []) {
+          const value = entry?.path;
+          if (typeof value === "string" && path.isAbsolute(value) && existsSync(value)) {
+            approvedSelections.add(realpathSync.native(value));
+          }
+        }
+      }
+      if (
+        (method === "packages.combine" || method === "packages.extract") &&
+        result &&
+        typeof result === "object"
+      ) {
         const outputPath = (result as { outputPath?: unknown }).outputPath;
         if (typeof outputPath === "string" && existsSync(outputPath)) {
           approvedSelections.add(realpathSync.native(outputPath));
@@ -534,6 +603,7 @@ function registerIpc(): void {
   ipcMain.handle("dialog:packages", async () => {
     const result = await dialog.showOpenDialog({
       title: "Choose Valve package files",
+      ...(addonsDirectory ? { defaultPath: addonsDirectory } : {}),
       properties: ["openFile", "multiSelections"],
       filters: [{ name: "Valve packages", extensions: ["vpk", "pak"] }]
     });

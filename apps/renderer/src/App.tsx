@@ -32,11 +32,13 @@ import {
   RefreshCw,
   Search,
   Settings2,
+  Split,
   ShieldAlert,
   ShieldCheck,
   Tag,
   Trash2,
   Upload,
+  VolumeX,
   UserRound,
   Wrench,
   X
@@ -93,13 +95,14 @@ type View =
 
 // Tools that operate on finished .vpk files, grouped behind one nav entry so
 // more can be added without crowding the sidebar.
-type Utility = "combiner" | "installed" | "inspect" | "compare";
+type Utility = "combiner" | "installed" | "inspect" | "compare" | "split";
 
 const UTILITIES: Array<{ id: Utility; label: string; icon: typeof AudioLines }> = [
   { id: "combiner", label: "PAK Combiner", icon: Merge },
   { id: "installed", label: "Installed Mods", icon: PackageSearch },
   { id: "inspect", label: "Inspect a Mod", icon: FileArchive },
-  { id: "compare", label: "Compare Mods", icon: GitCompare }
+  { id: "compare", label: "Compare Mods", icon: GitCompare },
+  { id: "split", label: "Split a Mod", icon: Split }
 ];
 
 const NAV_ITEMS: Array<{ id: View; label: string; icon: typeof AudioLines }> = [
@@ -210,6 +213,7 @@ function App() {
   const [inspectedMod, setInspectedMod] = useState<ModPackageReport | null>(null);
   const [modComparison, setModComparison] = useState<ModComparisonReport | null>(null);
   const [utility, setUtility] = useState<Utility>("combiner");
+  const [splitSource, setSplitSource] = useState<PackageInventory | null>(null);
   const [appVersion, setAppVersion] = useState<string | null>(null);
   const startupCheckStarted = useRef(false);
   const tutorialCheckStarted = useRef(false);
@@ -563,6 +567,7 @@ function App() {
                 void loadBootstrap();
               }}
               onNotice={setNotice}
+              onInfoNotice={setInfoNotice}
               onIndexed={() => void loadBootstrap()}
               onRequireProject={() => {
                 setNotice("Create or select a project before choosing replacement audio.");
@@ -625,6 +630,8 @@ function App() {
               onReport={setInspectedMod}
               comparison={modComparison}
               onComparison={setModComparison}
+              splitSource={splitSource}
+              onSplitSource={setSplitSource}
               onNavigate={setView}
               onProjectCreated={() => void loadBootstrap()}
               onNotice={setNotice}
@@ -992,6 +999,7 @@ function SoundBrowser({
   activeProject,
   onProjectChanged,
   onNotice,
+  onInfoNotice,
   onIndexed,
   onRequireProject
 }: {
@@ -1000,6 +1008,7 @@ function SoundBrowser({
   activeProject: ProjectManifest | null;
   onProjectChanged: (project: ProjectManifest) => void;
   onNotice: (message: string | null) => void;
+  onInfoNotice: (message: string | null) => void;
   onIndexed: () => void;
   onRequireProject: () => void;
 }) {
@@ -1114,6 +1123,31 @@ function SoundBrowser({
     }
     const path = await window.studio.selectAudio();
     if (path) await loadReplacement(path);
+  }
+
+  // Muting a sound needs no file from the user: the backend generates the
+  // silence itself, with processing that will not normalise or trim it away.
+  async function silenceSound() {
+    if (!selected) return;
+    if (!activeProject) {
+      onRequireProject();
+      return;
+    }
+    setOperation(`Silencing ${selected.filename}…`);
+    try {
+      const project = await window.studio.backend<ProjectManifest>(
+        "projects.silenceReplacement",
+        { projectId: activeProject.id, assetId: selected.id }
+      );
+      onProjectChanged(project);
+      onInfoNotice(
+        `${selected.filename} will be silent in ${project.displayName}. Build the project to apply it.`
+      );
+    } catch (error) {
+      onNotice(errorMessage(error));
+    } finally {
+      setOperation(null);
+    }
   }
 
   async function previewProcessed() {
@@ -1359,6 +1393,18 @@ function SoundBrowser({
                 <span>Selection never changes the original file.</span>
               </div>
               <button onClick={() => void chooseReplacement()}>Choose replacement</button>
+            </div>
+
+            <div className="silence-row">
+              <div>
+                <strong>Or silence it</strong>
+                <span>
+                  Replaces the sound with a silent clip so it stops playing. No file needed.
+                </span>
+              </div>
+              <button disabled={Boolean(operation)} onClick={() => void silenceSound()}>
+                <VolumeX size={15} /> Silence this sound
+              </button>
             </div>
 
             {replacement && (
@@ -2757,10 +2803,19 @@ function describeMod(modId: string, report: AddonConflictReport): string {
   return `${owned.join(", ")} (added by hand)`;
 }
 
+// The backend groups Panorama markup, styles and script under one "ui" kind.
+// "ui" on its own is jargon; "HUD" is what the mod pages call these.
+function describeKind(kind: string): string {
+  return kind === "ui" ? "HUD" : kind;
+}
+
 // "17 others" reads badly, and "other" covers several real resource types.
+// "1 ui" reads worse still, so the HUD kind gets a noun of its own.
 function describeKindCount(kind: string, count: number): string {
-  if (kind === "other") return `${count} other file${count === 1 ? "" : "s"}`;
-  return `${count} ${kind}${count === 1 ? "" : "s"}`;
+  const plural = count === 1 ? "" : "s";
+  if (kind === "other") return `${count} other file${plural}`;
+  if (kind === "ui") return `${count} HUD file${plural}`;
+  return `${count} ${kind}${plural}`;
 }
 
 // Reads mod packages that already exist: the ones installed in the game folder,
@@ -3265,7 +3320,7 @@ function InstalledModsPage({
                       </span>
                     )}
                     <code>{entry.path}</code>
-                    <span>{entry.kind}</span>
+                    <span>{describeKind(entry.kind)}</span>
                     <span>{entry.inseparable ? "blocks" : "pick one"}</span>
                   </li>
                 ))}
@@ -3368,7 +3423,7 @@ function InstalledModsPage({
                     <StatusBadge status={entry.status === "matched" ? "found" : "missing"} />
                   )}
                   <code>{entry.path}</code>
-                  <span>{entry.kind}</span>
+                  <span>{describeKind(entry.kind)}</span>
                   <span>{formatBytes(entry.sizeBytes)}</span>
                 </li>
               ))}
@@ -3397,6 +3452,8 @@ function UtilitiesPage({
   onReport,
   comparison,
   onComparison,
+  splitSource,
+  onSplitSource,
   onNavigate,
   onProjectCreated,
   onNotice,
@@ -3412,6 +3469,8 @@ function UtilitiesPage({
   onReport: (report: ModPackageReport | null) => void;
   comparison: ModComparisonReport | null;
   onComparison: (report: ModComparisonReport | null) => void;
+  splitSource: PackageInventory | null;
+  onSplitSource: (value: PackageInventory | null) => void;
   onNavigate: (view: View) => void;
   onProjectCreated: () => void;
   onNotice: (message: string | null) => void;
@@ -3440,10 +3499,22 @@ function UtilitiesPage({
         <PackageCombinerPage
           progress={packageProgress}
           onProgressReset={onPackageProgressReset}
+          conflicts={conflicts}
+          onConflicts={onConflicts}
           onNotice={onNotice}
         />
       )}
-      {utility !== "combiner" && (
+      {utility === "split" && (
+        <SplitPackagePage
+          source={splitSource}
+          onSource={onSplitSource}
+          conflicts={conflicts}
+          onConflicts={onConflicts}
+          onNotice={onNotice}
+          onInfoNotice={onInfoNotice}
+        />
+      )}
+      {utility !== "combiner" && utility !== "split" && (
         <InstalledModsPage
           section={utility}
           conflicts={conflicts}
@@ -3462,13 +3533,310 @@ function UtilitiesPage({
   );
 }
 
+// Takes one package apart: pick the files you want and write them to a new
+// .vpk. Entries are copied byte for byte, so nothing is recompiled.
+function SplitPackagePage({
+  source,
+  onSource,
+  conflicts,
+  onConflicts,
+  onNotice,
+  onInfoNotice
+}: {
+  source: PackageInventory | null;
+  onSource: (value: PackageInventory | null) => void;
+  conflicts: AddonConflictReport | null;
+  onConflicts: (report: AddonConflictReport | null) => void;
+  onNotice: (message: string | null) => void;
+  onInfoNotice: (message: string | null) => void;
+}) {
+  const [loading, setLoading] = useState(false);
+  const [extracting, setExtracting] = useState(false);
+  const [picking, setPicking] = useState(false);
+  const [search, setSearch] = useState("");
+  const [chosen, setChosen] = useState<Set<string>>(new Set());
+
+  // Top-level folder is how mods are actually organised, so it is the unit
+  // people think in: "just the sounds", "just the HUD".
+  const folders = useMemo(() => {
+    const groups = new Map<string, string[]>();
+    for (const entry of source?.entries ?? []) {
+      const folder = entry.path.includes("/") ? entry.path.split("/")[0] : "(root)";
+      if (!groups.has(folder)) groups.set(folder, []);
+      groups.get(folder)!.push(entry.path);
+    }
+    return [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  }, [source]);
+
+  const visible = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    const entries = source?.entries ?? [];
+    if (!term) return entries;
+    return entries.filter((entry) => entry.path.toLowerCase().includes(term));
+  }, [source, search]);
+
+  async function load(paths: string[]) {
+    if (!paths.length) return;
+    setLoading(true);
+    try {
+      const inspected = await window.studio.backend<PackageInventory[]>("packages.inspect", {
+        paths: [paths[0]]
+      });
+      onSource(inspected[0] ?? null);
+      setChosen(new Set());
+      setSearch("");
+    } catch (error) {
+      onNotice(errorMessage(error));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function choosePackage() {
+    const selected = await window.studio.selectPackages();
+    if (selected.length) await load(selected);
+  }
+
+  async function pickInstalled() {
+    if (!conflicts) {
+      setLoading(true);
+      try {
+        onConflicts(await window.studio.backend<AddonConflictReport>("mods.addonConflicts"));
+      } catch (error) {
+        onNotice(errorMessage(error));
+        return;
+      } finally {
+        setLoading(false);
+      }
+    }
+    setPicking(true);
+  }
+
+  function toggleFolder(paths: string[], allChosen: boolean) {
+    setChosen((current) => {
+      const next = new Set(current);
+      for (const path of paths) {
+        if (allChosen) next.delete(path);
+        else next.add(path);
+      }
+      return next;
+    });
+  }
+
+  async function extract() {
+    if (!source || chosen.size === 0) return;
+    const output = await window.studio.selectPackageOutput();
+    if (!output) return;
+    setExtracting(true);
+    try {
+      const result = await window.studio.backend<{
+        outputPath: string;
+        entryCount: number;
+        sourceEntryCount: number;
+      }>("packages.extract", {
+        path: source.path,
+        outputPath: output,
+        internalPaths: [...chosen]
+      });
+      onInfoNotice(
+        `Wrote ${result.entryCount} of ${result.sourceEntryCount} files to ${result.outputPath}.`
+      );
+    } catch (error) {
+      onNotice(errorMessage(error));
+    } finally {
+      setExtracting(false);
+    }
+  }
+
+  return (
+    <div className="page-stack split-page">
+      <PageHeading
+        title="Split a mod"
+        description="Pull part of a package out into its own .vpk. Useful when a mod bundles several changes and you only want one of them."
+        actions={
+          <>
+            {source && (
+              <button
+                disabled={loading || extracting}
+                onClick={() => {
+                  onSource(null);
+                  setChosen(new Set());
+                }}
+              >
+                <Trash2 size={15} /> Clear
+              </button>
+            )}
+            <button disabled={loading || extracting} onClick={() => void choosePackage()}>
+              <FileArchive size={15} /> Choose a file
+            </button>
+            <button
+              className="primary"
+              disabled={loading || extracting}
+              onClick={() => void pickInstalled()}
+            >
+              <PackageSearch size={15} /> Pick an installed mod
+            </button>
+          </>
+        }
+      />
+
+      <ActivityBar active={loading} label="Reading package…" />
+
+      {picking && (
+        <section className="card installed-picker">
+          <div className="section-heading">
+            <div>
+              <h3>Pick an installed mod</h3>
+              <p>Choose the package you want to take apart.</p>
+            </div>
+            <button onClick={() => setPicking(false)}>Cancel</button>
+          </div>
+          <ul className="installed-picker-list">
+            {(conflicts?.packages ?? [])
+              .filter((entry) => entry.enabled && !entry.error)
+              .map((entry) => (
+                <li key={entry.path}>
+                  <button
+                    className="split-pick"
+                    onClick={() => {
+                      setPicking(false);
+                      void load([entry.path]);
+                    }}
+                  >
+                    <strong>{describePackage(entry, conflicts?.usesModManager ?? false)}</strong>
+                    <small>
+                      {entry.filename} · {entry.entryCount.toLocaleString()} files ·{" "}
+                      {formatBytes(entry.sizeBytes)}
+                    </small>
+                  </button>
+                </li>
+              ))}
+          </ul>
+        </section>
+      )}
+
+      {!source && !loading && !picking && (
+        <section className="card empty package-empty">
+          <Split size={28} />
+          <strong>No package loaded</strong>
+          <span>Choose a mod to see what is inside it and take out the parts you want.</span>
+        </section>
+      )}
+
+      {source && (
+        <>
+          <section className="package-summary card">
+            <Metadata label="Package" value={source.filename} />
+            <Metadata label="Files" value={source.entryCount.toLocaleString()} />
+            <Metadata label="Selected" value={chosen.size.toLocaleString()} />
+            <label className="package-search">
+              <Search size={14} />
+              <input
+                value={search}
+                placeholder="Filter files…"
+                onChange={(event) => setSearch(event.target.value)}
+              />
+            </label>
+          </section>
+
+          <section className="card split-folders">
+            <div className="section-heading">
+              <div>
+                <h3>Whole folders</h3>
+                <p>Mods group their changes this way, so it is usually the quickest cut.</p>
+              </div>
+              <button
+                className="primary"
+                disabled={chosen.size === 0 || extracting}
+                onClick={() => void extract()}
+              >
+                <Split size={15} /> Extract {chosen.size || ""} to a new .vpk
+              </button>
+            </div>
+            <ul className="split-folder-list">
+              {folders.map(([folder, paths]) => {
+                const picked = paths.filter((path) => chosen.has(path)).length;
+                const all = picked === paths.length;
+                return (
+                  <li key={folder}>
+                    <input
+                      type="checkbox"
+                      id={`folder-${folder}`}
+                      checked={all}
+                      ref={(element) => {
+                        // Partly-selected folders read as neither on nor off.
+                        if (element) element.indeterminate = picked > 0 && !all;
+                      }}
+                      onChange={() => toggleFolder(paths, all)}
+                    />
+                    <label htmlFor={`folder-${folder}`}>
+                      <strong>{folder}</strong>
+                      <small>
+                        {picked}/{paths.length} files
+                      </small>
+                    </label>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+
+          <section className="card split-files">
+            <div className="section-heading">
+              <div>
+                <h3>Individual files</h3>
+                <p>
+                  {visible.length.toLocaleString()} shown
+                  {search ? ` of ${source.entryCount.toLocaleString()}` : ""}
+                </p>
+              </div>
+            </div>
+            <ul className="split-file-list">
+              {visible.slice(0, 400).map((entry) => (
+                <li key={entry.path}>
+                  <input
+                    type="checkbox"
+                    id={`file-${entry.path}`}
+                    checked={chosen.has(entry.path)}
+                    onChange={() =>
+                      setChosen((current) => {
+                        const next = new Set(current);
+                        if (next.has(entry.path)) next.delete(entry.path);
+                        else next.add(entry.path);
+                        return next;
+                      })
+                    }
+                  />
+                  <label htmlFor={`file-${entry.path}`}>
+                    <code>{entry.path}</code>
+                    <small>{formatBytes(entry.sizeBytes)}</small>
+                  </label>
+                </li>
+              ))}
+            </ul>
+            {visible.length > 400 && (
+              <p className="overview-more">
+                and {(visible.length - 400).toLocaleString()} more — filter to narrow the list
+              </p>
+            )}
+          </section>
+        </>
+      )}
+    </div>
+  );
+}
+
 function PackageCombinerPage({
   progress,
   onProgressReset,
+  conflicts,
+  onConflicts,
   onNotice
 }: {
   progress: PackageProgress | null;
   onProgressReset: () => void;
+  conflicts: AddonConflictReport | null;
+  onConflicts: (report: AddonConflictReport | null) => void;
   onNotice: (message: string | null) => void;
 }) {
   const [packages, setPackages] = useState<PackageInventory[]>([]);
@@ -3476,6 +3844,8 @@ function PackageCombinerPage({
   const [loading, setLoading] = useState(false);
   const [combining, setCombining] = useState(false);
   const [result, setResult] = useState<PackageCombineResult | null>(null);
+  const [pickingInstalled, setPickingInstalled] = useState(false);
+  const [ticked, setTicked] = useState<Set<string>>(new Set());
 
   const duplicatePaths = useMemo(() => {
     const owners = new Map<string, { path: string; packages: string[] }>();
@@ -3492,23 +3862,39 @@ function PackageCombinerPage({
 
   const totalEntries = packages.reduce((total, packageFile) => total + packageFile.entryCount, 0);
 
-  async function choosePackages() {
+  // Filenames repeat constantly across mods, so every listed entry says which
+  // mod it came from. Falls back to the package filename when the mod manager
+  // does not know the package.
+  const modLabelByPackage = useMemo(() => {
+    const labels = new Map<string, string>();
+    for (const packageFile of packages) {
+      const installed = conflicts?.packages.find(
+        (entry) => entry.path.toLowerCase() === packageFile.path.toLowerCase()
+      );
+      labels.set(packageFile.path, installed?.modName ?? packageFile.filename);
+    }
+    return labels;
+  }, [packages, conflicts]);
+
+  const sharedPaths = useMemo(
+    () => new Set(duplicatePaths.map((entry) => entry.path.toLowerCase())),
+    [duplicatePaths]
+  );
+
+  // Shared by both ways of adding packages: a file dialog, and picking from
+  // the mods already installed. Existing entries keep their order, because
+  // order decides which package wins a shared path.
+  async function addPaths(incoming: string[]) {
+    const additions = incoming.filter(
+      (value) =>
+        !packages.some((packageFile) => packageFile.path.toLowerCase() === value.toLowerCase())
+    );
+    if (!additions.length) return;
+    setLoading(true);
+    setResult(null);
     try {
-      const selected = await window.studio.selectPackages();
-      if (!selected.length) return;
-      const paths = [
-        ...packages.map((packageFile) => packageFile.path),
-        ...selected.filter(
-          (value) =>
-            !packages.some(
-              (packageFile) => packageFile.path.toLowerCase() === value.toLowerCase()
-            )
-        )
-      ];
-      setLoading(true);
-      setResult(null);
       const inspected = await window.studio.backend<PackageInventory[]>("packages.inspect", {
-        paths
+        paths: [...packages.map((packageFile) => packageFile.path), ...additions]
       });
       setPackages(inspected);
     } catch (error) {
@@ -3516,6 +3902,43 @@ function PackageCombinerPage({
     } finally {
       setLoading(false);
     }
+  }
+
+  async function choosePackages() {
+    try {
+      const selected = await window.studio.selectPackages();
+      if (selected.length) await addPaths(selected);
+    } catch (error) {
+      onNotice(errorMessage(error));
+    }
+  }
+
+  // Scanning is what makes the installed packages usable here: it is also what
+  // authorises them, so a file dialog is not needed for mods already in place.
+  async function pickInstalled() {
+    if (!conflicts) {
+      setLoading(true);
+      try {
+        onConflicts(
+          await window.studio.backend<AddonConflictReport>("mods.addonConflicts")
+        );
+      } catch (error) {
+        onNotice(errorMessage(error));
+        return;
+      } finally {
+        setLoading(false);
+      }
+    }
+    setTicked(new Set());
+    setPickingInstalled(true);
+  }
+
+  async function addTicked() {
+    const chosen = (conflicts?.packages ?? [])
+      .filter((entry) => ticked.has(entry.path))
+      .map((entry) => entry.path);
+    setPickingInstalled(false);
+    if (chosen.length) await addPaths(chosen);
   }
 
   function removePackage(index: number) {
@@ -3576,12 +3999,74 @@ function PackageCombinerPage({
                 <Trash2 size={15} /> Clear
               </button>
             )}
-            <button className="primary" disabled={loading || combining} onClick={() => void choosePackages()}>
+            <button disabled={loading || combining} onClick={() => void choosePackages()}>
               <FileArchive size={15} /> Add PAK files
+            </button>
+            <button
+              className="primary"
+              disabled={loading || combining}
+              onClick={() => void pickInstalled()}
+            >
+              <PackageSearch size={15} /> Pick installed mods
             </button>
           </>
         }
       />
+
+      {pickingInstalled && (
+        <section className="card installed-picker">
+          <div className="section-heading">
+            <div>
+              <h3>Pick installed mods</h3>
+              <p>
+                Mods currently in your addons folder. Disabled and unreadable ones are not
+                listed, since the game does not load them either.
+              </p>
+            </div>
+            <div className="button-row">
+              <button onClick={() => setPickingInstalled(false)}>Cancel</button>
+              <button className="primary" disabled={ticked.size === 0} onClick={() => void addTicked()}>
+                <Plus size={15} /> Add {ticked.size || ""} selected
+              </button>
+            </div>
+          </div>
+          <ul className="installed-picker-list">
+            {(conflicts?.packages ?? [])
+              .filter((entry) => entry.enabled && !entry.error)
+              .map((entry) => {
+                const already = packages.some(
+                  (packageFile) => packageFile.path.toLowerCase() === entry.path.toLowerCase()
+                );
+                return (
+                  <li key={entry.path}>
+                    <input
+                      type="checkbox"
+                      id={`pick-${entry.path}`}
+                      disabled={already}
+                      checked={ticked.has(entry.path)}
+                      onChange={() =>
+                        setTicked((current) => {
+                          const next = new Set(current);
+                          if (next.has(entry.path)) next.delete(entry.path);
+                          else next.add(entry.path);
+                          return next;
+                        })
+                      }
+                    />
+                    <label htmlFor={`pick-${entry.path}`}>
+                      <strong>{describePackage(entry, conflicts?.usesModManager ?? false)}</strong>
+                      <small>
+                        {entry.filename} · {entry.entryCount.toLocaleString()} files ·{" "}
+                        {formatBytes(entry.sizeBytes)}
+                        {already ? " · already added" : ""}
+                      </small>
+                    </label>
+                  </li>
+                );
+              })}
+          </ul>
+        </section>
+      )}
 
       <ActivityBar active={loading} label="Reading package directories…" />
 
@@ -3590,9 +4075,14 @@ function PackageCombinerPage({
           <PackageOpen size={28} />
           <strong>No packages selected</strong>
           <span>Add two or more .vpk or Valve-format .pak files to inspect their contents.</span>
-          <button className="primary" onClick={() => void choosePackages()}>
-            <FileArchive size={15} /> Choose package files
-          </button>
+          <div className="button-row">
+            <button onClick={() => void choosePackages()}>
+              <FileArchive size={15} /> Choose package files
+            </button>
+            <button className="primary" onClick={() => void pickInstalled()}>
+              <PackageSearch size={15} /> Pick installed mods
+            </button>
+          </div>
         </section>
       ) : (
         <>
@@ -3623,8 +4113,10 @@ function PackageCombinerPage({
                   <header className="package-file-head">
                     <FileArchive size={20} />
                     <div>
-                      <strong>{packageFile.filename}</strong>
-                      <code title={packageFile.path}>{packageFile.path}</code>
+                      <strong>{modLabelByPackage.get(packageFile.path) ?? packageFile.filename}</strong>
+                      <code title={packageFile.path}>
+                        {packageFile.filename} · {packageFile.path}
+                      </code>
                     </div>
                     <span>
                       {packageFile.entryCount.toLocaleString()} items · {formatBytes(packageFile.sizeBytes)}
@@ -3669,8 +4161,25 @@ function PackageCombinerPage({
                     </summary>
                     <div className="package-entry-list">
                       {shownEntries.map((entry) => (
-                        <div className="package-entry" key={entry.path}>
+                        <div
+                          className={
+                            sharedPaths.has(entry.path.toLowerCase())
+                              ? "package-entry shared"
+                              : "package-entry"
+                          }
+                          key={entry.path}
+                        >
                           <code title={entry.path}>{entry.path}</code>
+                          <em
+                            className="package-entry-owner"
+                            title={
+                              sharedPaths.has(entry.path.toLowerCase())
+                                ? "Another loaded package also has this path"
+                                : undefined
+                            }
+                          >
+                            {modLabelByPackage.get(packageFile.path) ?? packageFile.filename}
+                          </em>
                           <span>{formatBytes(entry.sizeBytes)}</span>
                         </div>
                       ))}

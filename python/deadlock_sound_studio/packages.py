@@ -136,15 +136,92 @@ def combine_packages(
         )
 
     selected = sorted(winners.values(), key=lambda value: value.output_path.casefold())
+    written = _write_package(selected, resolved_output, progress, "Combined package is ready.")
+
+    return {
+        **written,
+        "inputCount": len(resolved_inputs),
+        "conflictCount": len(conflicts),
+        "conflicts": conflicts,
+        "renamedCount": sum(
+            1 for value in selected if value.output_path != value.entry.path
+        ),
+        "sizeBytes": resolved_output.stat().st_size,
+    }
+
+
+def extract_package(
+    source_path: Path,
+    output_path: Path,
+    internal_paths: list[str],
+    progress: ProgressCallback | None = None,
+) -> dict[str, object]:
+    """Write a new package containing only ``internal_paths`` from ``source_path``.
+
+    The inverse of combining. Mods are often shipped as one archive holding
+    several separate changes - a skin plus a HUD tweak, or a model plus every
+    material variant the author made - and taking only the part you want
+    otherwise means unpacking and rebuilding by hand.
+
+    Entries are copied byte for byte, so nothing is recompiled and the result
+    behaves exactly as the original did for the files it keeps.
+    """
+    _validate_inputs([source_path])
+    resolved_source = source_path.resolve(strict=True)
+    resolved_output = _validated_output(output_path, [resolved_source])
+
+    wanted = {normalize_internal_path(value).casefold() for value in internal_paths}
+    if not wanted:
+        raise validation_error("Choose at least one file to extract")
+
+    selected: list[SelectedEntry] = []
+    for entry in list_vpk(resolved_source):
+        normalized = normalize_internal_path(entry.path)
+        if normalized.casefold() in wanted:
+            selected.append(SelectedEntry(resolved_source, entry, normalized))
+
+    # A path that is not in the package is a mistake worth stopping for: the
+    # output would look fine while quietly missing what was asked for.
+    missing = wanted - {value.output_path.casefold() for value in selected}
+    if missing:
+        raise validation_error(
+            "Some requested files are not in that package",
+            path=sorted(missing)[0],
+            missing=len(missing),
+        )
+
+    selected.sort(key=lambda value: value.output_path.casefold())
+    written = _write_package(selected, resolved_output, progress, "Extracted package is ready.")
+    return {
+        **written,
+        "sourcePath": str(resolved_source),
+        "sourceEntryCount": len(list_vpk(resolved_source)),
+        "sizeBytes": resolved_output.stat().st_size,
+    }
+
+
+def _write_package(
+    selected: list[SelectedEntry],
+    resolved_output: Path,
+    progress: ProgressCallback | None,
+    completion_message: str,
+) -> dict[str, object]:
+    """Write chosen entries to a single-file VPK, then reopen it to verify.
+
+    Shared by combining and extracting so the binary format is only written in
+    one place. Writes to a temporary file and renames on success, so a failure
+    part way through cannot leave a half-written package behind.
+    """
     if not selected:
-        raise StudioError("PACKAGE_EMPTY", "The selected packages contain no entries.")
+        raise StudioError("PACKAGE_EMPTY", "The selection contains no entries.")
+
     offsets: dict[str, int] = {}
     data_offset = 0
     for value in selected:
         if value.size > 0xFFFFFFFF or data_offset + value.size > 0xFFFFFFFF:
             raise StudioError(
                 "PACKAGE_TOO_LARGE",
-                "The merged single-file VPK exceeds the format's 32-bit data limit.",
+                "The single-file VPK exceeds the format's 32-bit data limit.",
             )
         offsets[value.output_path.casefold()] = data_offset
         data_offset += value.size
@@ -157,13 +234,7 @@ def combine_packages(
             output.write(tree)
             total_entries = len(selected)
             for index, value in enumerate(selected, start=1):
-                _emit(
-                    progress,
-                    "writing",
-                    index - 1,
-                    total_entries,
-                    f"Writing {value.output_path}…",
-                )
+                _emit(progress, "writing", index - 1, total_entries, f"Writing {value.output_path}…")
                 copied = copy_vpk_entry(value.source, value.entry, output)
                 if copied != value.size:
                     raise StudioError(
@@ -171,35 +242,29 @@ def combine_packages(
                         "A package entry did not produce the expected number of bytes.",
                         {"path": value.output_path},
                     )
-                _emit(
-                    progress,
-                    "writing",
-                    index,
-                    total_entries,
-                    f"Wrote {value.output_path}.",
-                )
+                _emit(progress, "writing", index, total_entries, f"Wrote {value.output_path}.")
         verified = list_vpk(temporary)
         if len(verified) != len(selected):
             raise StudioError(
                 "PACKAGE_VERIFY_FAILED",
-                "The combined package failed its post-write directory verification.",
+                "The written package failed its post-write directory verification.",
             )
         os.replace(temporary, resolved_output)
     finally:
         temporary.unlink(missing_ok=True)
 
-    _emit(progress, "complete", len(selected), len(selected), "Combined package is ready.")
-    return {
-        "outputPath": str(resolved_output),
-        "entryCount": len(selected),
-        "inputCount": len(resolved_inputs),
-        "conflictCount": len(conflicts),
-        "conflicts": conflicts,
-        "renamedCount": sum(
-            1 for value in selected if value.output_path != value.entry.path
-        ),
-        "sizeBytes": resolved_output.stat().st_size,
-    }
+    _emit(progress, "complete", len(selected), len(selected), completion_message)
+    return {"outputPath": str(resolved_output), "entryCount": len(selected)}
+
+
+def _validated_output(output_path: Path, inputs: list[Path]) -> Path:
+    if output_path.suffix.casefold() not in {".vpk", ".pak"}:
+        raise validation_error("Package output must end in .vpk or .pak")
+    resolved = output_path.expanduser().resolve(strict=False)
+    if resolved in inputs:
+        raise validation_error("The output cannot overwrite an input package")
+    resolved.parent.mkdir(parents=True, exist_ok=True)
+    return resolved
 
 
 def _build_tree(selected: list[SelectedEntry], offsets: dict[str, int]) -> bytes:

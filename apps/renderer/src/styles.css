@@ -1983,7 +1983,7 @@ input[type="checkbox"], input[type="radio"] {
 
 .package-entry {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 18px;
   padding: 8px 16px;
   border-top: 1px solid var(--border-soft);
@@ -3566,4 +3566,206 @@ input[type="radio"] {
 
 .installed-merge-list code {
   color: #d4d4d4;
+}
+
+/* "Silence this sound": a replacement that needs no file from the user. */
+
+.silence-row {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  margin: 10px 0;
+  padding: 12px 14px;
+  background: #111111;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+}
+
+.silence-row strong {
+  display: block;
+  font-size: 11px;
+  font-weight: 550;
+}
+
+.silence-row span {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.silence-row button {
+  flex: 0 0 auto;
+}
+
+/* Picking from mods already installed, instead of hunting for .vpk files. */
+
+.installed-picker {
+  padding: 18px 20px;
+}
+
+.installed-picker-list {
+  display: grid;
+  gap: 4px;
+  margin: 14px 0 0;
+  padding: 0;
+  max-height: 420px;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.installed-picker-list li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 11px;
+  align-items: center;
+  padding: 9px 11px;
+  background: #111111;
+  border: 1px solid var(--border-soft);
+  border-radius: 7px;
+}
+
+.installed-picker-list label {
+  min-width: 0;
+  cursor: pointer;
+}
+
+.installed-picker-list strong {
+  display: block;
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 550;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.installed-picker-list small {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.installed-picker-list input:disabled + label {
+  cursor: default;
+  opacity: 0.5;
+}
+
+/* Split a Mod: take part of a package out into its own .vpk. */
+
+.split-folders,
+.split-files {
+  padding: 18px 20px;
+}
+
+.split-folder-list,
+.split-file-list {
+  display: grid;
+  gap: 4px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.split-file-list {
+  max-height: 460px;
+  overflow-y: auto;
+}
+
+.split-folder-list li,
+.split-file-list li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 11px;
+  align-items: center;
+  padding: 8px 11px;
+  background: #111111;
+  border: 1px solid var(--border-soft);
+  border-radius: 7px;
+}
+
+.split-folder-list label,
+.split-file-list label {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  justify-content: space-between;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.split-folder-list strong {
+  font-size: 12px;
+  font-weight: 550;
+}
+
+.split-file-list code {
+  overflow: hidden;
+  color: #d4d4d4;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.split-folder-list small,
+.split-file-list small {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.split-pick {
+  display: block;
+  width: 100%;
+  padding: 0;
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  text-align: left;
+}
+
+.split-pick strong {
+  display: block;
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 550;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.split-pick small {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+/* Which mod an entry came from. Filenames repeat across mods constantly, so
+   the owner is coloured differently from the path to be readable at a glance. */
+
+.package-entry-owner {
+  max-width: 220px;
+  overflow: hidden;
+  color: #7dd3fc;
+  font-size: 9px;
+  font-style: normal;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A path more than one loaded package provides: only one will survive the
+   merge, so it is worth spotting while choosing the order. */
+.package-entry.shared {
+  background: rgba(251, 191, 36, 0.06);
+}
+
+.package-entry.shared code {
+  color: var(--warning);
+}
+
+.package-entry.shared .package-entry-owner {
+  color: var(--warning);
 }

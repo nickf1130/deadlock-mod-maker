@@ -86,11 +86,29 @@ def test_unindexed_kinds_are_unchecked_rather_than_missing(
 
     report = inspect_mod_package(package, database)
 
-    # Models are named now, but still unverifiable: the indexer skips them.
-    assert report.counts_by_kind() == {"other": 1, "model": 1}
+    # Both kinds are named now, but still unverifiable: the indexer skips them.
+    assert report.counts_by_kind() == {"ui": 1, "model": 1}
     assert len(report.unchecked) == 2
     assert report.missing == []
     assert report.matched == []
+
+
+def test_panorama_files_share_one_ui_kind(tmp_path: Path, database: Database):
+    """A HUD mod ships markup, styles and script together. Reporting three
+    separate kinds tells the player nothing they can act on; "3 HUD files"
+    does."""
+    package = write_vpk(
+        tmp_path / "better_hud.vpk",
+        {
+            "panorama/layout/hud/element_gun.vxml_c": b"markup",
+            "panorama/styles/ability_hud_elements/element_gun.vcss_c": b"styles",
+            "panorama/scripts/hud.vjs_c": b"script",
+        },
+    )
+
+    report = inspect_mod_package(package, database)
+
+    assert report.counts_by_kind() == {"ui": 3}
 
 
 def test_inspect_rejects_files_that_are_not_packages(tmp_path: Path, database: Database):
@@ -344,6 +362,22 @@ def test_comparison_flags_a_shared_model_as_unmergeable(tmp_path: Path):
     assert report.blockers[0].kind == "model"
     # The blocking collision is listed first so it cannot be missed.
     assert report.shared[0].inseparable is True
+
+
+def test_comparison_flags_a_shared_stylesheet_as_unmergeable(tmp_path: Path):
+    """One Panorama stylesheet covers a whole screen region: element_gun.vcss_c
+    holds the crosshair rules *and* the hit marker rules. A crosshair mod and a
+    hit marker mod therefore collide on that single path, and the winner takes
+    both - which is not something picking files can fix."""
+    stylesheet = "panorama/styles/ability_hud_elements/element_gun.vcss_c"
+    crosshair = write_vpk(tmp_path / "crosshair.vpk", {stylesheet: b"crosshair"})
+    hitmarker = write_vpk(tmp_path / "hitmarker.vpk", {stylesheet: b"hitmarker"})
+
+    report = compare_mod_packages([crosshair, hitmarker])
+
+    assert report.mergeable is False
+    assert [blocker.path for blocker in report.blockers] == [stylesheet]
+    assert report.blockers[0].kind == "ui"
 
 
 def test_comparison_allows_merging_when_only_materials_collide(tmp_path: Path):

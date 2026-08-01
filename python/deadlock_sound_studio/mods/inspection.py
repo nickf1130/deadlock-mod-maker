@@ -36,14 +36,29 @@ KIND_BY_EXTENSION = {
     ".vmat_c": "material",
     ".vmdl_c": "model",
     ".vpcf_c": "particle",
+    # Panorama is the game's HTML/CSS-shaped UI layer: .vxml_c is the markup,
+    # .vcss_c the stylesheet, .vjs_c the script. HUD mods are built entirely
+    # from these three, so they share one kind - a player thinks "this changes
+    # the HUD", not "this changes a stylesheet".
+    ".vxml_c": "ui",
+    ".vcss_c": "ui",
+    ".vjs_c": "ui",
 }
 UNKNOWN_KIND = "other"
 
-# Kinds where one file holds several things a player thinks of separately. A
-# Deadlock hero and the weapon they carry share a single .vmdl_c, so two mods
-# that both replace it cannot be merged by picking files: whichever wins brings
-# its whole mesh. Only 4 of the game's 152 hero models ship a separate weapon.
-INSEPARABLE_KINDS = frozenset({"model"})
+# Kinds where one file holds several things a player thinks of separately, so
+# two mods that both replace it cannot be merged by picking files. Whichever
+# one wins brings the whole file with it.
+#
+# model
+#     A Deadlock hero and the weapon they carry share a single .vmdl_c, so the
+#     winner brings its whole mesh. Only 4 of the game's 152 hero models ship a
+#     separate weapon.
+# ui
+#     One Panorama stylesheet covers a whole screen region. Every crosshair
+#     *and* hit marker rule lives in element_gun.vcss_c, which is why a
+#     crosshair mod and a hit marker mod collide on that single path.
+INSEPARABLE_KINDS = frozenset({"model", "ui"})
 
 # Only these kinds reach the catalog, so only these can be checked against it.
 # A Panorama or model path is absent from the index because the indexer skips

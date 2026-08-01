@@ -9,7 +9,12 @@ import pytest
 
 from conftest import write_vpk
 from deadlock_sound_studio.errors import StudioError
-from deadlock_sound_studio.packages import RenameRule, combine_packages, inspect_packages
+from deadlock_sound_studio.packages import (
+    RenameRule,
+    combine_packages,
+    extract_package,
+    inspect_packages,
+)
 from deadlock_sound_studio.models import Settings
 from deadlock_sound_studio.paths import AppPaths
 from deadlock_sound_studio import requirements
@@ -417,3 +422,66 @@ def test_rename_rules_that_cannot_apply_are_rejected(tmp_path: Path):
             [RenameRule(package="nope.vpk", source="real.vsnd_c", target="x.vsnd_c")],
         )
     assert "not being combined" in missing_package.value.message
+
+
+# --- splitting a package ----------------------------------------------------
+
+
+def test_extract_writes_only_the_requested_files(tmp_path: Path):
+    """Mods often bundle several separate changes; taking one out should not
+    require unpacking and rebuilding the archive by hand."""
+    bundle = write_vpk(
+        tmp_path / "bundle.vpk",
+        {
+            "sounds/keep_me.vsnd_c": b"sound",
+            "panorama/styles/hud.vcss_c": b"hud",
+            "materials/skin.vtex_c": b"skin",
+        },
+    )
+    output = tmp_path / "sounds_only.vpk"
+
+    result = extract_package(bundle, output, ["sounds/keep_me.vsnd_c"])
+
+    assert result["entryCount"] == 1
+    assert result["sourceEntryCount"] == 3
+    entries = {entry.path: entry for entry in list_vpk(output)}
+    assert set(entries) == {"sounds/keep_me.vsnd_c"}
+    # Copied byte for byte, so nothing is recompiled.
+    assert read_vpk_entry(output, entries["sounds/keep_me.vsnd_c"]) == b"sound"
+
+
+def test_extract_keeps_several_files_and_leaves_the_source_alone(tmp_path: Path):
+    bundle = write_vpk(
+        tmp_path / "bundle.vpk",
+        {"a.vsnd_c": b"a", "b.vsnd_c": b"b", "c.vsnd_c": b"c"},
+    )
+    output = tmp_path / "subset.vpk"
+
+    extract_package(bundle, output, ["a.vsnd_c", "c.vsnd_c"])
+
+    assert {entry.path for entry in list_vpk(output)} == {"a.vsnd_c", "c.vsnd_c"}
+    # The package being split from is only read.
+    assert {entry.path for entry in list_vpk(bundle)} == {"a.vsnd_c", "b.vsnd_c", "c.vsnd_c"}
+
+
+def test_extract_rejects_a_path_the_package_does_not_have(tmp_path: Path):
+    bundle = write_vpk(tmp_path / "bundle.vpk", {"a.vsnd_c": b"a"})
+
+    with pytest.raises(StudioError) as error:
+        extract_package(bundle, tmp_path / "out.vpk", ["a.vsnd_c", "absent.vsnd_c"])
+    assert "not in that package" in error.value.message
+
+
+def test_extract_needs_at_least_one_file(tmp_path: Path):
+    bundle = write_vpk(tmp_path / "bundle.vpk", {"a.vsnd_c": b"a"})
+
+    with pytest.raises(StudioError):
+        extract_package(bundle, tmp_path / "out.vpk", [])
+
+
+def test_extract_cannot_overwrite_its_own_source(tmp_path: Path):
+    bundle = write_vpk(tmp_path / "bundle.vpk", {"a.vsnd_c": b"a"})
+
+    with pytest.raises(StudioError) as error:
+        extract_package(bundle, bundle, ["a.vsnd_c"])
+    assert "cannot overwrite" in error.value.message
